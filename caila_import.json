@@ -34,6 +34,51 @@
     "phrases" : [ {
       "text" : "привет"
     } ]
+  }, {
+    "id" : 995123,
+    "path" : "/равняйсь",
+    "enabled" : true,
+    "businessShared" : false,
+    "business" : false,
+    "phrases" : [ {
+      "text" : "равняйсь"
+    }, {
+      "text" : "равняйся"
+    }, {
+      "text" : "внимание"
+    }, {
+      "text" : "смирно"
+    } ]
+  }, {
+    "id" : 995124,
+    "path" : "/лежать",
+    "enabled" : true,
+    "businessShared" : false,
+    "business" : false,
+    "phrases" : [ {
+      "text" : "лежать"
+    }, {
+      "text" : "ляг"
+    }, {
+      "text" : "лечь"
+    }, {
+      "text" : "приляг"
+    } ]
+  }, {
+    "id" : 995125,
+    "path" : "/вставай",
+    "enabled" : true,
+    "businessShared" : false,
+    "business" : false,
+    "phrases" : [ {
+      "text" : "вставай"
+    }, {
+      "text" : "встань"
+    }, {
+      "text" : "поднимайся"
+    }, {
+      "text" : "поднимись"
+    } ]
   } ],
   "entities" : [ ],
   "enabledSystemEntities" : [ "duckling.number", "duckling.time", "duckling.duration", "duckling.phone-number", "duckling.email", "duckling.url" ]
