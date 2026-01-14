@@ -125,12 +125,16 @@ pip install -r requirements.txt
 
 **Вариант 2: Вручную**
 ```bash
+# При запуске через Docker используйте порт 20000
+ngrok http 20000
+
+# При локальном запуске используйте порт 8000
 ngrok http 8000
 ```
 
 После запуска ngrok покажет HTTPS URL вида:
 ```
-Forwarding  https://abc123.ngrok-free.app -> http://localhost:8000
+Forwarding  https://abc123.ngrok-free.app -> http://localhost:20000
 ```
 
 **Скопируйте этот URL** - он понадобится для настройки в SmartApp Studio.
@@ -190,10 +194,18 @@ uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 Проверить, что сервер работает, можно через:
 
 ```bash
+# При запуске через Docker (порт 20000)
+curl http://localhost:20000/
+
+# При локальном запуске (порт 8000)
 curl http://localhost:8000/
 ```
 
-Или откройте в браузере: `http://localhost:8000/docs` для просмотра автоматической документации API.
+Или откройте в браузере: 
+- Docker: `http://localhost:20000/docs`
+- Локально: `http://localhost:8000/docs`
+
+для просмотра автоматической документации API.
 
 ## Запуск через Docker (Рекомендуется)
 
@@ -202,37 +214,37 @@ curl http://localhost:8000/
 ### Требования
 
 - Docker версии 20.10 или выше
-- Docker Compose версии 1.29 или выше
+- Docker Compose версии 2.0 или выше (или используйте `docker compose` вместо `docker-compose`)
 
 ### Быстрый старт
 
 1. **Запуск всех сервисов:**
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
 
    Это запустит:
-   - Главное приложение на порту 8000
+   - Главное приложение на порту 20000 (внешний порт, внутренний 8000)
    - Три заглушки роботов на портах 8081, 8082, 8083
 
 2. **Проверка статуса:**
    ```bash
-   docker-compose ps
+   docker compose ps
    ```
 
 3. **Просмотр логов:**
    ```bash
    # Все сервисы
-   docker-compose logs -f
+   docker compose logs -f
    
    # Конкретный сервис
-   docker-compose logs -f app
-   docker-compose logs -f robot-1
+   docker compose logs -f app
+   docker compose logs -f robot-1
    ```
 
 4. **Остановка:**
    ```bash
-   docker-compose down
+   docker compose down
    ```
 
 ### Структура Docker
@@ -241,7 +253,8 @@ curl http://localhost:8000/
 
 1. **Главное приложение** (`Dockerfile`)
    - Базовый образ: `python:3.10-slim`
-   - Порт: 8000
+   - Внутренний порт: 8000
+   - Внешний порт: 20000 (настраивается в docker-compose.yml)
    - Volumes: `config/`, `data/`, `logs/`
 
 2. **Заглушки роботов** (`robot_stub/Dockerfile`)
@@ -278,25 +291,25 @@ curl http://localhost:8000/
 
 ```bash
 # Запуск только главного приложения
-docker-compose up -d app
+docker compose up -d app
 
 # Запуск конкретного робота
-docker-compose up -d robot-1
+docker compose up -d robot-1
 
 # Перезапуск сервиса
-docker-compose restart app
+docker compose restart app
 
 # Пересборка образов
-docker-compose build
+docker compose build
 
 # Просмотр логов конкретного сервиса
-docker-compose logs -f robot-2
+docker compose logs -f robot-2
 
 # Остановка всех сервисов
-docker-compose down
+docker compose down
 
 # Остановка с удалением volumes (осторожно - удалит данные!)
-docker-compose down -v
+docker compose down -v
 ```
 
 ### Volumes
@@ -310,7 +323,7 @@ Docker Compose монтирует следующие директории:
 ### Health Checks
 
 Все сервисы имеют health checks:
-- Главное приложение: `http://localhost:8000/health`
+- Главное приложение: `http://localhost:20000/health`
 - Заглушки роботов: `http://localhost:8081/health`, `http://localhost:8082/health`, `http://localhost:8083/health`
 
 ### Переменные окружения
@@ -336,7 +349,7 @@ Docker Compose монтирует следующие директории:
 2. Скопируйте HTTPS URL (например: `https://abc123.ngrok-free.app`)
 3. В SmartApp Studio укажите endpoint:
    ```
-   https://abc123.ngrok-free.app/salute
+   https://abc123.ngrok-free.app/v1/webhook
    ```
 
 **Примечание:** URL может быть `.ngrok-free.app` или `.ngrok-free.dev` в зависимости от версии ngrok.
@@ -345,8 +358,8 @@ Docker Compose монтирует следующие директории:
 
 ```bash
 # Установите cloudflared
-cloudflared tunnel --url http://localhost:8000
-# Используйте полученный HTTPS URL: https://random-name.trycloudflare.com/salute
+cloudflared tunnel --url http://localhost:20000
+# Используйте полученный HTTPS URL: https://random-name.trycloudflare.com/v1/webhook
 ```
 
 #### 3. Постоянное решение - Реальный домен через Cloudflare
@@ -364,7 +377,7 @@ cloudflared tunnel --url http://localhost:8000
 
 2. После настройки ваш навык будет доступен по адресу:
 ```
-   https://robot-panda.tech/salute
+   https://robot-panda.tech/v1/webhook
 ```
 
 **Вариант B: Cloudflare Proxy + Nginx**
@@ -426,7 +439,7 @@ RDS-2P-Salute/
 
 ### Обработка команд
 
-1. **Получение запроса** - `app/api/routes.py` получает POST запрос от SmartApp API на `/salute`
+1. **Получение запроса** - `app/api/routes.py` получает POST запрос от SmartApp API на `/v1/webhook`
 2. **Извлечение user_id** - `BindingService` извлекает идентификатор пользователя из `uuid`
 3. **Проверка привязки** - проверяется наличие привязки робота к пользователю
 4. **Распознавание команды** - `RobotService` анализирует текст команды пользователя
@@ -454,7 +467,7 @@ RDS-2P-Salute/
 ## API Endpoints
 
 - `GET /` - Проверка работы сервера
-- `POST /salute` - Основной endpoint для обработки команд от SmartApp API
+- `POST /v1/webhook` - Основной endpoint для обработки команд от SmartApp API
 - `GET /health` - Health check endpoint
 - `GET /docs` - Автоматическая документация API (Swagger UI)
 - `POST /robot/command` - Endpoint для тестирования команд робота
@@ -464,6 +477,12 @@ RDS-2P-Salute/
 Можно протестировать команды напрямую через API:
 
 ```bash
+# При запуске через Docker (порт 20000)
+curl -X POST http://localhost:20000/robot/command \
+  -H "Content-Type: application/json" \
+  -d '{"utterance": "лежать"}'
+
+# При локальном запуске (порт 8000)
 curl -X POST http://localhost:8000/robot/command \
   -H "Content-Type: application/json" \
   -d '{"utterance": "лежать"}'
@@ -512,16 +531,16 @@ sudo journalctl -u robot-panda.service --since today
 **Если сервер запущен через Docker:**
 ```bash
 # Просмотр логов главного приложения
-docker-compose logs -f app
+docker compose logs -f app
 
 # Просмотр логов конкретного робота
-docker-compose logs -f robot-1
+docker compose logs -f robot-1
 
 # Просмотр последних 50 строк логов
-docker-compose logs --tail 50 app
+docker compose logs --tail 50 app
 
 # Просмотр логов всех сервисов
-docker-compose logs -f
+docker compose logs -f
 
 # Просмотр логов конкретного контейнера по ID
 docker logs -f <container_id>
@@ -540,8 +559,8 @@ docker logs -f <container_id>
 ### Тестирование через curl
 
 ```bash
-# Тест команды "лежать"
-curl -X POST http://localhost:8000/salute \
+# Тест команды "лежать" (через Docker на порту 20000)
+curl -X POST http://localhost:20000/v1/webhook \
   -H "Content-Type: application/json" \
   -d '{
     "messageName": "MESSAGE_TO_SKILL",
@@ -556,7 +575,7 @@ curl -X POST http://localhost:8000/salute \
   }'
 
 # Тест через endpoint для робота
-curl -X POST http://localhost:8000/robot/command \
+curl -X POST http://localhost:20000/robot/command \
   -H "Content-Type: application/json" \
   -d '{"utterance": "вставай"}'
 ```
@@ -564,7 +583,7 @@ curl -X POST http://localhost:8000/robot/command \
 ### Тестирование через SmartApp Studio
 
 1. Запустите ngrok и сервер
-2. Настройте endpoint в SmartApp Studio: `https://your-ngrok-url.ngrok-free.app/salute`
+2. Настройте endpoint в SmartApp Studio: `https://your-ngrok-url.ngrok-free.app/v1/webhook`
 3. Протестируйте навык в интерфейсе SmartApp Studio
 
 ## Конфигурация
@@ -635,19 +654,19 @@ ROBOT_ID=1 python3 -m robot_stub.main
 **Docker запуск (рекомендуется):**
 
 ```bash
-# Запуск всех заглушек через docker-compose
-docker-compose up -d robot-1 robot-2 robot-3
+# Запуск всех заглушек через docker compose
+docker compose up -d robot-1 robot-2 robot-3
 
 # Или запуск конкретной заглушки
-docker-compose up -d robot-1
+docker compose up -d robot-1
 
 # Просмотр логов заглушки
-docker-compose logs -f robot-1
+docker compose logs -f robot-1
 ```
 
 Заглушка будет:
 - Генерировать 4-значные коды при запросе `/bind/request`
-- Логировать коды в консоль (в Docker: `docker-compose logs robot-1`)
+- Логировать коды в консоль (в Docker: `docker compose logs robot-1`)
 - Принимать команды управления на `/motors/command`
 - Поддерживать переменную окружения `ROBOT_ID` для автоматического вычисления порта
 
@@ -655,10 +674,46 @@ docker-compose logs -f robot-1
 
 Система больше не использует `ROBOT_API_URL` - URL роботов настраивается через `robots.json` и привязывается к пользователям индивидуально.
 
+## Production Deployment
+
+### Настройка через Nginx
+
+Проект настроен для работы через Nginx с SSL сертификатом. Пример конфигурации:
+
+1. **Nginx конфигурация** (`/etc/nginx/sites-available/salute.ridramecraft.ru`):
+   ```nginx
+   server {
+       server_name salute.ridramecraft.ru;
+       
+       location / {
+           proxy_pass http://127.0.0.1:20000;
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+       }
+       
+       listen 443 ssl;
+       ssl_certificate /etc/letsencrypt/live/salute.ridramecraft.ru/fullchain.pem;
+       ssl_certificate_key /etc/letsencrypt/live/salute.ridramecraft.ru/privkey.pem;
+   }
+   ```
+
+2. **Настройка SSL через Certbot:**
+   ```bash
+   certbot --nginx -d salute.ridramecraft.ru
+   ```
+
+3. **Endpoint для SmartApp Studio:**
+   ```
+   https://salute.ridramecraft.ru/v1/webhook
+   ```
+
 ## Примечания
 
 - Сервер должен быть доступен по HTTPS из интернета для работы с SmartApp API
 - Для локальной разработки используйте ngrok или Cloudflare Tunnel
+- В production рекомендуется использовать Docker Compose с портом 20000
 - Каждый пользователь должен привязать своего робота перед использованием
 - Привязки сохраняются в `user_robot_bindings.json` и сохраняются между сессиями
 - Коды верификации действительны 5 минут и хранятся во временном файле `binding_states.json`

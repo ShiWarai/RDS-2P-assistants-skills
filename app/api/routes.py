@@ -320,7 +320,7 @@ def log_user_command(user_visible_text: str, utterance: str, user_id: Optional[s
         logger.debug(f"Команда (для обработки): '{utterance}'")
 
 
-@router.post("/salute")
+@router.post("/v1/webhook")
 async def webhook(
     request: Request,
     robot_service: RobotService = Depends(get_robot_service),
