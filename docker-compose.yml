@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: robot-panda-app
+    container_name: rds-2p-salute-app
     ports:
       - "20000:8000"
       - "50051:50051"
