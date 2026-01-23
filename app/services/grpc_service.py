@@ -146,23 +146,24 @@ def initiate_binding(user_id: str, robot_id: str, binding_service: BindingServic
     
     # Генерируем 4-значный код привязки
     code = str(random.randint(1000, 9999))
-    expires_at = time.time() + 300  # 5 минут
+    expires_at_float = time.time() + 300  # 5 минут
+    expires_at_int = int(expires_at_float)  # Для protobuf нужен int
     
-    # Сохраняем состояние привязки
+    # Сохраняем состояние привязки (используем float для точности)
     binding_service.start_binding(
         user_id=user_id,
         robot_id=robot_id,
         code=code,
-        expires_at=expires_at
+        expires_at=expires_at_float
     )
     
     logger.info(f"Инициация привязки: user_id={user_id}, robot_id={robot_id}, code={code}")
     
-    # Отправляем код роботу через активное соединение
+    # Отправляем код роботу через активное соединение (используем int для protobuf)
     binding_message = robot_pb2.StreamMessage(
         binding_code=robot_pb2.BindingCodeMessage(
             code=code,
-            expires_at=expires_at
+            expires_at=expires_at_int
         )
     )
     

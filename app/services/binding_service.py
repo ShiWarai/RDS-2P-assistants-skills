@@ -5,7 +5,7 @@
 import os
 import logging
 import time
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Set
 import redis
 
 logger = logging.getLogger(__name__)
@@ -14,7 +14,10 @@ CODE_EXPIRY_SECONDS = 300  # 5 минут
 
 # Префиксы для ключей Redis
 BINDINGS_PREFIX = "bindings:"
-STATES_PREFIX = "binding_states:"
+STATES_PREFIX = "binding_states:"  # Старый префикс, будет удален после миграции
+HELP_STATES_PREFIX = "help_states:"  # Старый префикс, будет удален после миграции
+USER_STATES_PREFIX = "user_states:"  # Новый единый префикс для состояний
+BINDING_DATA_PREFIX = "binding_data:"  # Префикс для данных привязки
 
 
 class BindingService:
@@ -38,6 +41,113 @@ class BindingService:
         except Exception as e:
             logger.error(f"Ошибка подключения к Redis: {e}")
             raise
+    
+    def get_user_states(self, user_id: str) -> Set[str]:
+        """
+        Получает все активные состояния пользователя
+        
+        Args:
+            user_id: ID пользователя
+        
+        Returns:
+            Множество активных состояний (например, {"waiting_code", "waiting_help_section"})
+        """
+        try:
+            key = f"{USER_STATES_PREFIX}{user_id}"
+            if not self.redis_client.exists(key):
+                return set()
+            states = self.redis_client.smembers(key)
+            return set(states) if states else set()
+        except Exception as e:
+            logger.error(f"Ошибка получения состояний для user_id={user_id}: {e}")
+            return set()
+    
+    def has_user_state(self, user_id: str, state: str) -> bool:
+        """
+        Проверяет наличие конкретного состояния у пользователя
+        
+        Args:
+            user_id: ID пользователя
+            state: Название состояния (например, "waiting_code", "waiting_help_section")
+        
+        Returns:
+            True если состояние активно, False иначе
+        """
+        try:
+            key = f"{USER_STATES_PREFIX}{user_id}"
+            if not self.redis_client.exists(key):
+                return False
+            return self.redis_client.sismember(key, state)
+        except Exception as e:
+            logger.error(f"Ошибка проверки состояния {state} для user_id={user_id}: {e}")
+            return False
+    
+    def add_user_state(self, user_id: str, state: str, ttl: int = CODE_EXPIRY_SECONDS) -> bool:
+        """
+        Добавляет состояние пользователю
+        
+        Args:
+            user_id: ID пользователя
+            state: Название состояния (например, "waiting_code", "waiting_help_section")
+            ttl: Время жизни в секундах (по умолчанию 5 минут)
+        
+        Returns:
+            True если успешно
+        """
+        try:
+            key = f"{USER_STATES_PREFIX}{user_id}"
+            self.redis_client.sadd(key, state)
+            # Устанавливаем TTL (если ключ уже существовал, TTL обновится)
+            self.redis_client.expire(key, ttl)
+            logger.debug(f"Added state '{state}' for user {user_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Ошибка добавления состояния {state} для user_id={user_id}: {e}")
+            return False
+    
+    def remove_user_state(self, user_id: str, state: str) -> bool:
+        """
+        Удаляет состояние у пользователя
+        
+        Args:
+            user_id: ID пользователя
+            state: Название состояния для удаления
+        
+        Returns:
+            True если успешно
+        """
+        try:
+            key = f"{USER_STATES_PREFIX}{user_id}"
+            removed = self.redis_client.srem(key, state)
+            if removed > 0:
+                logger.debug(f"Removed state '{state}' for user {user_id}")
+                # Если Set пуст, удаляем ключ
+                if self.redis_client.scard(key) == 0:
+                    self.redis_client.delete(key)
+            return True
+        except Exception as e:
+            logger.error(f"Ошибка удаления состояния {state} для user_id={user_id}: {e}")
+            return False
+    
+    def clear_user_states(self, user_id: str) -> bool:
+        """
+        Очищает все состояния пользователя
+        
+        Args:
+            user_id: ID пользователя
+        
+        Returns:
+            True если успешно
+        """
+        try:
+            key = f"{USER_STATES_PREFIX}{user_id}"
+            deleted = self.redis_client.delete(key)
+            if deleted > 0:
+                logger.debug(f"Cleared all states for user {user_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Ошибка очистки состояний для user_id={user_id}: {e}")
+            return False
     
     def get_user_id(self, uuid_data: Dict[str, Any]) -> Optional[str]:
         """
@@ -73,28 +183,37 @@ class BindingService:
             return None
     
     def get_binding_state(self, user_id: str) -> Optional[str]:
-        """Получает текущее состояние процесса привязки"""
+        """
+        Получает текущее состояние процесса привязки (для обратной совместимости)
+        
+        ВАЖНО: Используйте has_user_state(user_id, "waiting_code") вместо этого метода
+        """
+        # Проверяем новую систему состояний
+        if self.has_user_state(user_id, "waiting_code"):
+            # Проверяем, не истек ли код
+            binding_data_key = f"{BINDING_DATA_PREFIX}{user_id}"
+            if self.redis_client.exists(binding_data_key):
+                expires_at_str = self.redis_client.hget(binding_data_key, "expires_at")
+                if expires_at_str:
+                    expires_at = float(expires_at_str)
+                    if time.time() > expires_at:
+                        logger.info(f"Binding code expired for user {user_id}")
+                        self.cancel_binding(user_id)
+                        return None
+                    return "waiting_code"
+        
+        # Проверяем старую систему для обратной совместимости
         try:
-            key = f"{STATES_PREFIX}{user_id}"
-            
-            # Проверяем существование ключа (TTL может истечь)
-            if not self.redis_client.exists(key):
-                logger.debug(f"User {user_id} not in binding_states")
+            old_key = f"{STATES_PREFIX}{user_id}"
+            if not self.redis_client.exists(old_key):
                 return None
             
-            # Получаем expires_at из Hash
-            expires_at_str = self.redis_client.hget(key, "expires_at")
+            expires_at_str = self.redis_client.hget(old_key, "expires_at")
             if not expires_at_str:
                 return None
             
             expires_at = float(expires_at_str)
-            current_time = time.time()
-            
-            logger.debug(f"Checking binding state for user {user_id}: expires_at={expires_at}, current_time={current_time}, diff={current_time - expires_at}")
-            
-            # Если TTL еще не истек, но expires_at уже прошел, удаляем вручную
-            if current_time > expires_at:
-                logger.info(f"Binding code expired for user {user_id}")
+            if time.time() > expires_at:
                 self.cancel_binding(user_id)
                 return None
             
@@ -114,22 +233,28 @@ class BindingService:
         logger.debug(f"Сохранение кода привязки: '{code_str}' (type: {type(code_str).__name__})")
         
         try:
-            key = f"{STATES_PREFIX}{user_id}"
+            # Удаляем старое состояние привязки, если есть (старая система)
+            old_state_key = f"{STATES_PREFIX}{user_id}"
+            self.redis_client.delete(old_state_key)
             
-            # Удаляем старое состояние, если есть
-            self.redis_client.delete(key)
+            # Удаляем старые данные привязки, если есть
+            binding_data_key = f"{BINDING_DATA_PREFIX}{user_id}"
+            self.redis_client.delete(binding_data_key)
             
-            # Сохраняем состояние в Hash
-            self.redis_client.hset(key, mapping={
+            # Сохраняем данные привязки в Hash
+            self.redis_client.hset(binding_data_key, mapping={
                 "robot_id": robot_id,
                 "code": code_str,
                 "expires_at": str(expires_at),
                 "attempts": "0"
             })
             
-            # Устанавливаем TTL (expires_at - current_time, минимум 1 секунда)
+            # Добавляем состояние "waiting_code" в единую систему состояний
             ttl = max(1, int(expires_at - time.time()))
-            self.redis_client.expire(key, ttl)
+            self.add_user_state(user_id, "waiting_code", ttl)
+            
+            # Устанавливаем TTL для данных привязки (синхронизирован с состояниями)
+            self.redis_client.expire(binding_data_key, ttl)
             
             logger.info(f"Started binding process for user {user_id} to robot {robot_id}")
             return True
@@ -145,29 +270,35 @@ class BindingService:
             tuple: (code, expires_at) или (None, None) если состояние не найдено или истекло
         """
         try:
-            key = f"{STATES_PREFIX}{user_id}"
+            # Проверяем новую систему
+            binding_data_key = f"{BINDING_DATA_PREFIX}{user_id}"
+            if self.redis_client.exists(binding_data_key):
+                state_data = self.redis_client.hgetall(binding_data_key)
+                if state_data:
+                    expires_at_str = state_data.get("expires_at")
+                    if expires_at_str:
+                        expires_at = float(expires_at_str)
+                        if time.time() > expires_at:
+                            self.cancel_binding(user_id)
+                            return None, None
+                        code = state_data.get("code")
+                        return code, expires_at
             
-            # Проверяем существование ключа
-            if not self.redis_client.exists(key):
-                return None, None
+            # Проверяем старую систему для обратной совместимости
+            old_key = f"{STATES_PREFIX}{user_id}"
+            if self.redis_client.exists(old_key):
+                state_data = self.redis_client.hgetall(old_key)
+                if state_data:
+                    expires_at_str = state_data.get("expires_at")
+                    if expires_at_str:
+                        expires_at = float(expires_at_str)
+                        if time.time() > expires_at:
+                            self.cancel_binding(user_id)
+                            return None, None
+                        code = state_data.get("code")
+                        return code, expires_at
             
-            # Получаем данные из Hash
-            state_data = self.redis_client.hgetall(key)
-            if not state_data:
-                return None, None
-            
-            # Проверяем истечение времени
-            expires_at_str = state_data.get("expires_at")
-            if not expires_at_str:
-                return None, None
-            
-            expires_at = float(expires_at_str)
-            if time.time() > expires_at:
-                self.cancel_binding(user_id)
-                return None, None
-            
-            code = state_data.get("code")
-            return code, expires_at
+            return None, None
         except Exception as e:
             logger.error(f"Ошибка получения кода привязки для user_id={user_id}: {e}")
             return None, None
@@ -175,11 +306,16 @@ class BindingService:
     def verify_binding_code(self, user_id: str, code: str) -> tuple[bool, str]:
         """Проверяет код верификации"""
         try:
-            key = f"{STATES_PREFIX}{user_id}"
-            
-            # Проверяем существование ключа
-            if not self.redis_client.exists(key):
-                return False, "Процесс привязки не начат"
+            # Используем новую систему
+            binding_data_key = f"{BINDING_DATA_PREFIX}{user_id}"
+            if not self.redis_client.exists(binding_data_key):
+                # Проверяем старую систему для обратной совместимости
+                old_key = f"{STATES_PREFIX}{user_id}"
+                if not self.redis_client.exists(old_key):
+                    return False, "Процесс привязки не начат"
+                key = old_key
+            else:
+                key = binding_data_key
             
             # Получаем данные из Hash
             state_data = self.redis_client.hgetall(key)
@@ -222,11 +358,20 @@ class BindingService:
     def complete_binding(self, user_id: str) -> bool:
         """Завершает привязку - сохраняет постоянную привязку"""
         try:
-            state_key = f"{STATES_PREFIX}{user_id}"
             binding_key = f"{BINDINGS_PREFIX}{user_id}"
             
-            # Получаем состояние
-            state_data = self.redis_client.hgetall(state_key)
+            # Пробуем получить данные из новой системы
+            binding_data_key = f"{BINDING_DATA_PREFIX}{user_id}"
+            state_data = None
+            if self.redis_client.exists(binding_data_key):
+                state_data = self.redis_client.hgetall(binding_data_key)
+            
+            # Если не нашли в новой системе, проверяем старую
+            if not state_data:
+                old_state_key = f"{STATES_PREFIX}{user_id}"
+                if self.redis_client.exists(old_state_key):
+                    state_data = self.redis_client.hgetall(old_state_key)
+            
             if not state_data:
                 logger.error(f"No binding state found for user {user_id}")
                 return False
@@ -239,8 +384,13 @@ class BindingService:
             # Сохраняем постоянную привязку (просто строка robot_id)
             self.redis_client.set(binding_key, robot_id)
             
-            # Удаляем временное состояние
-            self.redis_client.delete(state_key)
+            # Удаляем временное состояние из новой системы
+            self.remove_user_state(user_id, "waiting_code")
+            self.redis_client.delete(binding_data_key)
+            
+            # Удаляем из старой системы
+            old_state_key = f"{STATES_PREFIX}{user_id}"
+            self.redis_client.delete(old_state_key)
             
             logger.info(f"Completed binding: user {user_id} -> robot {robot_id}")
             return True
@@ -251,9 +401,18 @@ class BindingService:
     def cancel_binding(self, user_id: str) -> bool:
         """Отменяет процесс привязки"""
         try:
-            key = f"{STATES_PREFIX}{user_id}"
-            deleted = self.redis_client.delete(key)
-            if deleted > 0:
+            # Удаляем состояние из новой системы
+            self.remove_user_state(user_id, "waiting_code")
+            
+            # Удаляем данные привязки
+            binding_data_key = f"{BINDING_DATA_PREFIX}{user_id}"
+            self.redis_client.delete(binding_data_key)
+            
+            # Удаляем из старой системы (для обратной совместимости)
+            old_key = f"{STATES_PREFIX}{user_id}"
+            deleted = self.redis_client.delete(old_key)
+            
+            if deleted > 0 or self.redis_client.exists(binding_data_key) == 0:
                 logger.info(f"Cancelled binding for user {user_id}")
                 return True
             return False
@@ -288,37 +447,54 @@ class BindingService:
                     "state": "completed"
                 }
             
-            # Проверяем временное состояние
-            state_key = f"{STATES_PREFIX}{user_id}"
-            if not self.redis_client.exists(state_key):
-                return {
-                    "has_binding": False,
-                    "state": None
-                }
+            # Проверяем временное состояние (новая система)
+            if self.has_user_state(user_id, "waiting_code"):
+                binding_data_key = f"{BINDING_DATA_PREFIX}{user_id}"
+                if self.redis_client.exists(binding_data_key):
+                    state_data = self.redis_client.hgetall(binding_data_key)
+                    if state_data:
+                        # Проверяем, не истек ли код
+                        expires_at_str = state_data.get("expires_at")
+                        if expires_at_str:
+                            expires_at = float(expires_at_str)
+                            if time.time() > expires_at:
+                                self.cancel_binding(user_id)
+                                return {
+                                    "has_binding": False,
+                                    "state": None
+                                }
+                            return {
+                                "has_binding": False,
+                                "robot_id": state_data.get("robot_id"),
+                                "state": "waiting_code",
+                                "attempts": int(state_data.get("attempts", "0"))
+                            }
             
-            state_data = self.redis_client.hgetall(state_key)
-            if not state_data:
-                return {
-                    "has_binding": False,
-                    "state": None
-                }
-            
-            # Проверяем, не истек ли код
-            expires_at_str = state_data.get("expires_at")
-            if expires_at_str:
-                expires_at = float(expires_at_str)
-                if time.time() > expires_at:
-                    self.cancel_binding(user_id)
-                    return {
-                        "has_binding": False,
-                        "state": None
-                    }
+            # Проверяем старую систему для обратной совместимости
+            old_state_key = f"{STATES_PREFIX}{user_id}"
+            if self.redis_client.exists(old_state_key):
+                state_data = self.redis_client.hgetall(old_state_key)
+                if state_data:
+                    # Проверяем, не истек ли код
+                    expires_at_str = state_data.get("expires_at")
+                    if expires_at_str:
+                        expires_at = float(expires_at_str)
+                        if time.time() > expires_at:
+                            self.cancel_binding(user_id)
+                            return {
+                                "has_binding": False,
+                                "state": None
+                            }
+                        return {
+                            "has_binding": False,
+                            "robot_id": state_data.get("robot_id"),
+                            "state": "waiting_code",
+                            "attempts": int(state_data.get("attempts", "0"))
+                        }
             
             return {
                 "has_binding": False,
-                "robot_id": state_data.get("robot_id"),
-                "state": "waiting_code",
-                "attempts": int(state_data.get("attempts", "0"))
+                "state": None
             }
         except Exception as e:
             logger.error(f"Ошибка получения информации о привязке для user_id={user_id}: {e}")
@@ -326,3 +502,4 @@ class BindingService:
                 "has_binding": False,
                 "state": None
             }
+    

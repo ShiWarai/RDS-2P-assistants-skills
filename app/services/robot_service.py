@@ -11,17 +11,62 @@ from app.services.cvc_client import CVCClient
 
 logger = logging.getLogger(__name__)
 
-# Список команд для отображения в справке
-COMMANDS_FOR_HELP = [
-    {'trigger': 'лапу', 'function': 'give_paw'},
-    {'trigger': 'равняйсь', 'function': 'stand_at_attention'},
-    {'trigger': 'отставить', 'function': 'dismiss'},
-    {'trigger': 'вставай', 'function': 'dismiss'},
-    {'trigger': 'лежать', 'function': 'lie_down'},
-    {'trigger': ['кувырок', 'вращайся'], 'function': 'rotate'},
-    {'trigger': ['бегать', 'пошли'], 'function': 'run'},
-    {'trigger': 'смирно', 'function': 'stop_running'},
-    {'trigger': ['держи джойстик', 'возьми джойстик', 'подключись к джойстику'], 'function': 'reconnect_joystick'}
+# Список команд с полной информацией
+COMMANDS = [
+    {
+        'trigger': 'лапу',
+        'function': 'give_paw',
+        'description': 'робот поднимет лапу',
+        'response_text': "Робот поднимает лапу! 🐾"
+    },
+    {
+        'trigger': 'равняйсь',
+        'function': 'stand_at_attention',
+        'description': 'робот выровняется по стойке смирно',
+        'response_text': "Робот равняется! 🎖️"
+    },
+    {
+        'trigger': 'отставить',
+        'function': 'dismiss',
+        'description': 'робот встанет',
+        'response_text': "Робот встаёт! ✨"
+    },
+    {
+        'trigger': 'вставай',
+        'function': 'dismiss',
+        'description': 'робот встанет',
+        'response_text': "Робот встаёт! ✨"
+    },
+    {
+        'trigger': 'лежать',
+        'function': 'lie_down',
+        'description': 'робот ляжет',
+        'response_text': "Робот ложится! 💤"
+    },
+    {
+        'trigger': ['кувырок', 'вращайся'],
+        'function': 'rotate',
+        'description': 'робот сделает кувырок',
+        'response_text': "Робот делает кувырок! 🤸"
+    },
+    {
+        'trigger': ['бегать', 'пошли'],
+        'function': 'run',
+        'description': 'робот начнет бегать',
+        'response_text': "Робот начинает бегать! 🏃"
+    },
+    {
+        'trigger': 'смирно',
+        'function': 'stop_running',
+        'description': 'робот остановится',
+        'response_text': "Робот останавливается! 🛑"
+    },
+    {
+        'trigger': ['держи джойстик', 'возьми джойстик', 'подключись к джойстику'],
+        'function': 'reconnect_joystick',
+        'description': 'робот подключится к джойстику',
+        'response_text': "Робот подключается к джойстику! 🎮"
+    }
 ]
 
 
@@ -126,42 +171,31 @@ class RobotService:
         function_name, command_type = self.parse_command(utterance)
         
         # Определяем текст ответа пользователю
+        utterance_lower = utterance.lower().strip()
+        
         if command_type == RobotCommand.HELP:
-            # Формируем список команд из единого хранилища
-            help_lines = ["Доступные команды:"]
-            for cmd in COMMANDS_FOR_HELP:
-                triggers = cmd['trigger'] if isinstance(cmd['trigger'], list) else [cmd['trigger']]
-                if len(triggers) > 1:
-                    triggers_str = " или ".join([f"'{t}'" for t in triggers])
-                    help_lines.append(f"• Скажи роботу {triggers_str};")
-                else:
-                    help_lines.append(f"• Скажи роботу '{triggers[0]}';")
-            help_lines.extend([
-                "• Команда 'Привяжи робота один' (или два, три и т.д.);",
-                "• Команда 'Отвяжи робота';",
-                "• Команда 'Помощь';",
-                "• Команда 'Молчи'."
-            ])
-            text = "\n".join(help_lines)
+            # Проверяем, выбран ли конкретный раздел в том же запросе (например, "помощь служебные")
+            if "служебн" in utterance_lower:
+                text = self._get_service_commands_help()
+            elif "исполняем" in utterance_lower:
+                text = self._get_robot_commands_help()
+            else:
+                # Показываем выбор разделов
+                text = "Выберите раздел: 'служебные' или 'исполняемые'."
+        elif not function_name and command_type == RobotCommand.UNKNOWN:
+            text = "Скажите 'помощь' для списка команд."
         elif command_type == RobotCommand.SILENCE:
             text = "Хорошо, помолчим. 🐼👋"
         elif command_type == RobotCommand.ERROR:
             text = "Извините, сервис классификации команд временно недоступен. Пожалуйста, попробуйте позже."
         elif function_name:
             # Команда распознана - определяем ответ пользователю по function
-            response_texts = {
-                'give_paw': "Робот поднимает лапу! 🐾",
-                'stand_at_attention': "Робот равняется! 🎖️",
-                'dismiss': "Робот встаёт! ✨",
-                'lie_down': "Робот ложится! 💤",
-                'rotate': "Робот делает кувырок! 🤸",
-                'run': "Робот начинает бегать! 🏃",
-                'stop_running': "Робот останавливается! 🛑",
-                'reconnect_joystick': "Робот подключается к джойстику! 🎮"
-            }
-            text = response_texts.get(function_name, f"Команда '{function_name}' отправлена роботу.")
-        else:
-            text = "Хм, робот не понял команду. Скажите 'помощь' для списка команд."
+            for cmd in COMMANDS:
+                if cmd['function'] == function_name:
+                    text = cmd['response_text']
+                    break
+            else:
+                text = f"Команда '{function_name}' отправлена роботу."
         
         # Генерируем команду для отправки роботу (function на английском)
         command_text = function_name if function_name else None
@@ -174,3 +208,50 @@ class RobotService:
             finished=(command_type == RobotCommand.SILENCE),
             error_message=text if command_type == RobotCommand.ERROR else None
         )
+    
+    def _get_service_commands_help(self) -> str:
+        """Возвращает список служебных команд"""
+        help_lines = ["Служебные команды:"]
+        help_lines.extend([
+            "'Привяжи робота 1' или 'Привяжи панду 2' - привязать робота;",
+            "'Отвяжи робота' - отвязать робота;",
+            "'Молчи' - временно остановить общение."
+        ])
+        return "\n".join(help_lines)
+    
+    def _get_robot_commands_help(self) -> str:
+        """Возвращает список команд управления роботом (только названия)"""
+        help_lines = ["Команды управления роботом:"]
+        for cmd in COMMANDS:
+            triggers = cmd['trigger'] if isinstance(cmd['trigger'], list) else [cmd['trigger']]
+            # Показываем только первый вариант
+            help_lines.append(f"• '{triggers[0]}'")
+        
+        help_lines.append("\nДля подробного описания скажите 'расскажи про \"название команды\"'.")
+        return "\n".join(help_lines)
+    
+    def _get_command_description(self, command_name: str) -> Optional[str]:
+        """
+        Возвращает подробное описание команды по названию
+        
+        Args:
+            command_name: Название команды (триггер)
+        
+        Returns:
+            Описание команды или None если команда не найдена
+        """
+        command_name_lower = command_name.lower().strip()
+        
+        # Ищем команду по триггеру
+        for cmd in COMMANDS:
+            triggers = cmd['trigger'] if isinstance(cmd['trigger'], list) else [cmd['trigger']]
+            # Проверяем все варианты триггеров
+            for trigger in triggers:
+                if trigger.lower() == command_name_lower:
+                    description = cmd.get('description', '')
+                    if description:
+                        return f"Команда '{trigger}':\n{description.capitalize()}."
+                    else:
+                        return f"Команда '{trigger}'"
+        
+        return None

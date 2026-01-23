@@ -13,6 +13,7 @@ import httpx
 from app.services.robot_service import RobotService
 from app.services.binding_service import BindingService
 from app.services.grpc_service import initiate_binding, complete_binding_with_code, send_command_to_robot
+from app.models.commands import RobotCommand
 from app.utils.request_parser import (
     extract_utterance_chatapp,
     extract_utterance_legacy,
@@ -163,15 +164,15 @@ async def handle_binding_flow(
     utterance_lower = utterance.lower().strip()
     
     # Проверяем команду отмены (обрабатываем в любом состоянии)
-    binding_state = binding_service.get_binding_state(user_id)
+    has_binding_state = binding_service.has_user_state(user_id, "waiting_code")
     if any(word in utterance_lower for word in ["отмена", "отменить", "отменить привязку"]):
-        return await _handle_cancel_command(binding_service, user_id, binding_state)
+        return await _handle_cancel_command(binding_service, user_id, "waiting_code" if has_binding_state else None)
     
     # Кэшируем состояние привязки (уже получено выше)
-    logger.debug(f"Состояние привязки для user_id={user_id}: {binding_state}, utterance='{utterance}'")
+    logger.debug(f"Состояние привязки для user_id={user_id}: {has_binding_state}, utterance='{utterance}'")
     
     # Если ожидается код - проверяем ввод кода
-    if binding_state == "waiting_code":
+    if has_binding_state:
         return await _handle_code_input(binding_service, user_id, utterance, message)
     
     # Если нет активной привязки, проверяем команду начала привязки
@@ -228,28 +229,109 @@ async def _process_command(
             else:
                 text = f"Привет! Ваш робот {robot_id} готов к управлению."
         else:
-            text = "Привяжите робота."
+            text = "Привяжите робота. Скажите 'привяжи робота 1' или 'привяжи панду 2'."
     elif utterance:
-        binding_state = binding_service.get_binding_state(user_id) if user_id else None
+        has_binding_state = binding_service.has_user_state(user_id, "waiting_code") if user_id else False
         
-        # Если в режиме привязки (waiting_code) - обрабатываем без CVC
-        if binding_state == "waiting_code":
-            # В режиме привязки все команды обрабатываются "по старинке" (без CVC)
-            binding_text, binding_finished = await handle_binding_flow(binding_service, user_id, utterance, message)
-            if binding_text is not None:
-                if isinstance(binding_text, list):
-                    if is_chatapp:
-                        response_payload = create_chatapp_response_multiple(data, binding_text, binding_finished)
-                        logger.info(f"Ответ: '{binding_text[0]}'")
-                        return binding_text[0], binding_finished, response_payload
-                    text = " ".join(binding_text)
+        # Если в режиме привязки (waiting_code) - обрабатываем с поддержкой помощи
+        if has_binding_state:
+            utterance_lower = utterance.lower().strip()
+            has_help_state = binding_service.has_user_state(user_id, "waiting_help_section") if user_id else False
+            has_command_detail_state = binding_service.has_user_state(user_id, "waiting_command_detail") if user_id else False
+            
+            # Если пользователь в режиме выбора раздела помощи (может быть одновременно в режиме привязки)
+            if has_help_state:
+                if "служеб" in utterance_lower:
+                    text = robot_service._get_service_commands_help()
+                    binding_service.remove_user_state(user_id, "waiting_help_section")
+                    finished = False
+                elif "исполняем" in utterance_lower:
+                    text = robot_service._get_robot_commands_help()
+                    binding_service.remove_user_state(user_id, "waiting_help_section")
+                    # Устанавливаем состояние ожидания выбора команды для подробного описания
+                    if user_id:
+                        binding_service.add_user_state(user_id, "waiting_command_detail")
+                    finished = False
                 else:
-                    text = binding_text
-                finished = binding_finished
+                    # Не выбор раздела - обрабатываем через handle_binding_flow
+                    binding_text, binding_finished = await handle_binding_flow(binding_service, user_id, utterance, message)
+                    if binding_text is not None:
+                        if isinstance(binding_text, list):
+                            if is_chatapp:
+                                response_payload = create_chatapp_response_multiple(data, binding_text, binding_finished)
+                                logger.info(f"Ответ: '{binding_text[0]}'")
+                                return binding_text[0], binding_finished, response_payload
+                            text = " ".join(binding_text)
+                        else:
+                            text = binding_text
+                        finished = binding_finished
+                    else:
+                        text = "Введите код привязки или скажите 'отмена'."
+                        finished = False
+            elif has_command_detail_state:
+                # Пользователь в режиме ожидания выбора команды для подробного описания
+                # Ищем название команды в запросе (формат: "расскажи про бегать" или просто "бегать")
+                utterance_lower = utterance.lower().strip()
+                
+                # Убираем префиксы типа "расскажи про", "про команду" и т.д.
+                command_name = utterance_lower
+                for prefix in ["расскажи про", "про команду", "про", "команда", "команду"]:
+                    if utterance_lower.startswith(prefix):
+                        command_name = utterance_lower[len(prefix):].strip()
+                        # Убираем кавычки если есть
+                        command_name = command_name.strip('"\'')
+                        break
+                
+                # Убираем кавычки если они есть
+                command_name = command_name.strip('"\'')
+                
+                description = robot_service._get_command_description(command_name)
+                if description:
+                    text = description
+                    binding_service.remove_user_state(user_id, "waiting_command_detail")
+                    finished = False
+                else:
+                    # Не удалось найти команду - обрабатываем через handle_binding_flow
+                    binding_text, binding_finished = await handle_binding_flow(binding_service, user_id, utterance, message)
+                    if binding_text is not None:
+                        if isinstance(binding_text, list):
+                            if is_chatapp:
+                                response_payload = create_chatapp_response_multiple(data, binding_text, binding_finished)
+                                logger.info(f"Ответ: '{binding_text[0]}'")
+                                return binding_text[0], binding_finished, response_payload
+                            text = " ".join(binding_text)
+                        else:
+                            text = binding_text
+                        finished = binding_finished
+                    else:
+                        binding_service.remove_user_state(user_id, "waiting_command_detail")
+                        text = "Введите код привязки или скажите 'отмена'."
+                        finished = False
             else:
-                # Команда не связана с привязкой, но мы в режиме привязки
-                text = "Введите код привязки или скажите 'отмена'."
-                finished = False
+                # Сначала проверяем, не запросил ли пользователь помощь (через CVC)
+                result = robot_service.process_command(utterance)
+                if result.command == RobotCommand.HELP and "служебн" not in utterance_lower and "исполняем" not in utterance_lower:
+                    # Пользователь запросил помощь в режиме привязки - добавляем состояние помощи
+                    if user_id:
+                        binding_service.add_user_state(user_id, "waiting_help_section")
+                    text = result.text
+                    finished = result.finished
+                else:
+                    # Обрабатываем через handle_binding_flow (без CVC)
+                    binding_text, binding_finished = await handle_binding_flow(binding_service, user_id, utterance, message)
+                    if binding_text is not None:
+                        if isinstance(binding_text, list):
+                            if is_chatapp:
+                                response_payload = create_chatapp_response_multiple(data, binding_text, binding_finished)
+                                logger.info(f"Ответ: '{binding_text[0]}'")
+                                return binding_text[0], binding_finished, response_payload
+                            text = " ".join(binding_text)
+                        else:
+                            text = binding_text
+                        finished = binding_finished
+                    else:
+                        text = "Введите код привязки или скажите 'отмена'."
+                        finished = False
         else:
             # Не в режиме привязки - проверяем через CVC, является ли это командой привязки/отвязки
             utterance_lower = utterance.lower().strip()
@@ -259,62 +341,120 @@ async def _process_command(
                 text = "Нет активной операции для отмены."
                 finished = False
             else:
-                logger.info(f"Проверка привязки: user_id={user_id}, has_binding={binding_service.has_binding(user_id) if user_id else False}")
-                result = robot_service.process_command(utterance)
+                # Проверяем состояние режима помощи
+                has_help_state = binding_service.has_user_state(user_id, "waiting_help_section") if user_id else False
+                has_command_detail_state = binding_service.has_user_state(user_id, "waiting_command_detail") if user_id else False
                 
-                # Получаем function_name из результата (может быть от CVC)
-                function_name = result.motor_command.get("function") if result.motor_command else None
-                
-                # Проверяем, является ли команда командой привязки/отвязки от CVC
-                if function_name == "bind":
-                    # Команда привязки от CVC - извлекаем номер робота и начинаем процесс привязки
-                    binding_text, binding_finished = await _handle_bind_start(binding_service, user_id, utterance)
-                    if isinstance(binding_text, list):
-                        if is_chatapp:
-                            response_payload = create_chatapp_response_multiple(data, binding_text, binding_finished)
-                            logger.info(f"Ответ: '{binding_text[0]}'")
-                            return binding_text[0], binding_finished, response_payload
-                        text = " ".join(binding_text)
+                if has_help_state:
+                    # Пользователь в режиме выбора раздела помощи
+                    if "служеб" in utterance_lower:
+                        text = robot_service._get_service_commands_help()
+                        binding_service.remove_user_state(user_id, "waiting_help_section")
+                        finished = False
+                    elif "исполняем" in utterance_lower:
+                        text = robot_service._get_robot_commands_help()
+                        binding_service.remove_user_state(user_id, "waiting_help_section")
+                        # Устанавливаем состояние ожидания выбора команды для подробного описания
+                        if user_id:
+                            binding_service.add_user_state(user_id, "waiting_command_detail")
+                        finished = False
                     else:
-                        text = binding_text
-                    finished = binding_finished
-                elif function_name == "unbind":
-                    # Команда отвязки от CVC
-                    binding_text, binding_finished = _handle_unbind(binding_service, user_id)
-                    text = binding_text
-                    finished = binding_finished
-                elif user_id and binding_service.has_binding(user_id):
-                    # Обычная команда для робота (требует привязки)
-                    # Если команда распознана и требует выполнения, отправляем через gRPC
-                    if result.success and result.motor_command and result.motor_command.get("function"):
-                        # Извлекаем имя функции для отправки роботу
-                        function_name = result.motor_command.get("function")
-                        logger.info(f"Отправка команды роботу: function={function_name}, user_id={user_id}")
-                        success, message = send_command_to_robot(user_id, function_name, binding_service)
-                        if success:
-                            # Команда успешно отправлена - используем текст об успехе
-                            text = result.text
-                        else:
-                            # Команда не отправлена - показываем ТОЛЬКО сообщение об ошибке (без текста об успехе)
-                            # ВАЖНО: полностью заменяем text на message, не объединяем!
-                            text = message
-                    else:
-                        # Команды HELP, SILENCE или нераспознанные команды - используем текст из result
-                        text = result.text
-                        if not result.success:
-                            logger.warning(f"Команда не распознана или нет функции: success={result.success}, motor_command={result.motor_command}")
+                        # Не выбор раздела - очищаем состояние и обрабатываем как обычную команду
+                        binding_service.remove_user_state(user_id, "waiting_help_section")
+                        # Продолжаем обработку команды ниже
+                        has_help_state = False  # Сбрасываем, чтобы обработать команду
+                elif has_command_detail_state:
+                    # Пользователь в режиме ожидания выбора команды для подробного описания
+                    # Ищем название команды в запросе (формат: "расскажи про бегать" или просто "бегать")
+                    utterance_lower = utterance.lower().strip()
                     
-                    finished = result.finished
-                else:
-                    # Команда требует привязки, но привязки нет
-                    text = "Привяжите робота."
-                    finished = False
+                    # Убираем префиксы типа "расскажи про", "про команду" и т.д.
+                    command_name = utterance_lower
+                    for prefix in ["расскажи про", "про команду", "про", "команда", "команду"]:
+                        if utterance_lower.startswith(prefix):
+                            command_name = utterance_lower[len(prefix):].strip()
+                            # Убираем кавычки если есть
+                            command_name = command_name.strip('"\'')
+                            break
+                    
+                    # Убираем кавычки если они есть
+                    command_name = command_name.strip('"\'')
+                    
+                    description = robot_service._get_command_description(command_name)
+                    if description:
+                        text = description
+                        binding_service.remove_user_state(user_id, "waiting_command_detail")
+                        finished = False
+                    else:
+                        # Не удалось найти команду - очищаем состояние и обрабатываем как обычную команду
+                        binding_service.remove_user_state(user_id, "waiting_command_detail")
+                        has_command_detail_state = False
+                
+                # Обрабатываем команду (если не было выбора раздела помощи и не было выбора команды)
+                if not has_help_state and not has_command_detail_state:
+                    logger.info(f"Проверка привязки: user_id={user_id}, has_binding={binding_service.has_binding(user_id) if user_id else False}")
+                    result = robot_service.process_command(utterance)
+                    
+                    # Получаем function_name из результата (может быть от CVC)
+                    function_name = result.motor_command.get("function") if result.motor_command else None
+                    
+                    # Если это команда помощи, устанавливаем состояние
+                    if result.command == RobotCommand.HELP and "служебн" not in utterance_lower and "исполняем" not in utterance_lower:
+                        if user_id:
+                            binding_service.add_user_state(user_id, "waiting_help_section")
+                        # Устанавливаем text из result для команды помощи
+                        text = result.text
+                        finished = result.finished
+                    # Проверяем, является ли команда командой привязки/отвязки от CVC
+                    elif function_name == "bind":
+                        # Команда привязки от CVC - извлекаем номер робота и начинаем процесс привязки
+                        binding_text, binding_finished = await _handle_bind_start(binding_service, user_id, utterance)
+                        if isinstance(binding_text, list):
+                            if is_chatapp:
+                                response_payload = create_chatapp_response_multiple(data, binding_text, binding_finished)
+                                logger.info(f"Ответ: '{binding_text[0]}'")
+                                return binding_text[0], binding_finished, response_payload
+                            text = " ".join(binding_text)
+                        else:
+                            text = binding_text
+                        finished = binding_finished
+                    elif function_name == "unbind":
+                        # Команда отвязки от CVC
+                        binding_text, binding_finished = _handle_unbind(binding_service, user_id)
+                        text = binding_text
+                        finished = binding_finished
+                    elif user_id and binding_service.has_binding(user_id):
+                        # Обычная команда для робота (требует привязки)
+                        # Если команда распознана и требует выполнения, отправляем через gRPC
+                        if result.success and result.motor_command and result.motor_command.get("function"):
+                            # Извлекаем имя функции для отправки роботу
+                            function_name = result.motor_command.get("function")
+                            logger.info(f"Отправка команды роботу: function={function_name}, user_id={user_id}")
+                            success, message = send_command_to_robot(user_id, function_name, binding_service)
+                            if success:
+                                # Команда успешно отправлена - используем текст об успехе
+                                text = result.text
+                            else:
+                                # Команда не отправлена - показываем ТОЛЬКО сообщение об ошибке (без текста об успехе)
+                                # ВАЖНО: полностью заменяем text на message, не объединяем!
+                                text = message
+                        else:
+                            # Команды HELP, SILENCE или нераспознанные команды - используем текст из result
+                            text = result.text
+                            if not result.success:
+                                logger.warning(f"Команда не распознана или нет функции: success={result.success}, motor_command={result.motor_command}")
+                        
+                        finished = result.finished
+                    else:
+                        # Команда требует привязки, но привязки нет
+                        text = "Привяжите робота. Скажите 'привяжи робота 1' или 'привяжи панду 2'."
+                        finished = False
     else:
         if is_chatapp:
             if user_id and binding_service.has_binding(user_id):
                 text = "Скажите команду для робота. Для списка команд - 'помощь'."
             else:
-                text = "Привяжите робота."
+                text = "Привяжите робота. Скажите 'привяжи робота 1' или 'привяжи панду 2'."
         else:
             text = "Не понял команду."
     
