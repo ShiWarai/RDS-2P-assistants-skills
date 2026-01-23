@@ -201,3 +201,17 @@ def extract_number_tokens_from_tokenized(tokenized_elements_list: List[Dict[str,
                 number_tokens.append(str(value))
     
     return number_tokens
+
+
+def extract_user_id(uuid_data: Dict[str, Any]) -> Optional[str]:
+    """
+    Извлекает идентификатор пользователя из uuid.
+    
+    Args:
+        uuid_data: Объект uuid из запроса SmartApp API
+        
+    Returns:
+        Идентификатор пользователя (sub или userId)
+    """
+    # Используем sub как основной идентификатор (более стабильный)
+    return uuid_data.get("sub") or uuid_data.get("userId")

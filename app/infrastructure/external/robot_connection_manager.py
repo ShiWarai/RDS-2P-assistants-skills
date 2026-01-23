@@ -3,9 +3,15 @@
 """
 import queue
 import logging
-from typing import Dict, Optional
+import json
+from pathlib import Path
+from typing import Dict, Optional, Any
 
 logger = logging.getLogger(__name__)
+
+# Определяем корень проекта
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
+ROBOTS_CONFIG_FILE = PROJECT_ROOT / "config" / "robots.json"
 
 
 class RobotConnectionManager:
@@ -14,8 +20,47 @@ class RobotConnectionManager:
     def __init__(self):
         """Инициализация менеджера соединений"""
         self._connections: Dict[str, queue.Queue] = {}
+        self._robots_config_cache: Optional[Dict[str, Dict[str, Any]]] = None
         logger.info("RobotConnectionManager инициализирован")
     
+    def get_robot_name(self, robot_id: str) -> str:
+        """
+        Получает имя робота по ID (опционально из конфига)
+        """
+        # Загружаем конфиг только если он существует и еще не загружен
+        if self._robots_config_cache is None:
+            if ROBOTS_CONFIG_FILE.exists():
+                try:
+                    with open(ROBOTS_CONFIG_FILE, 'r', encoding='utf-8') as f:
+                        self._robots_config_cache = json.load(f)
+                    logger.debug(f"Loaded robot names from config: {len(self._robots_config_cache)} robots")
+                except Exception as e:
+                    logger.debug(f"Could not load robots config: {e}")
+                    self._robots_config_cache = {}
+            else:
+                self._robots_config_cache = {}
+        
+        if self._robots_config_cache and robot_id in self._robots_config_cache:
+            return self._robots_config_cache[robot_id].get("name", f"Робот {robot_id}")
+        
+        return f"Робот {robot_id}"
+
+    def get_available_robots_list(self) -> str:
+        """
+        Возвращает строку со списком доступных роботов
+        """
+        connected_robots = self.get_connected_robots()
+        
+        if not connected_robots:
+            return "Нет подключенных роботов"
+        
+        robot_list = []
+        for robot_id in connected_robots:
+            name = self.get_robot_name(robot_id)
+            robot_list.append(f"{robot_id} - {name}")
+        
+        return ", ".join(robot_list)
+
     def add_connection(self, robot_id: str, message_queue: queue.Queue) -> None:
         """
         Добавляет активное соединение робота
@@ -93,3 +138,20 @@ class RobotConnectionManager:
             int: Количество активных соединений
         """
         return len(self._connections)
+
+
+# Глобальный экземпляр менеджера соединений
+_connection_manager: Optional[RobotConnectionManager] = None
+
+
+def get_connection_manager() -> RobotConnectionManager:
+    """
+    Возвращает глобальный экземпляр менеджера соединений (singleton)
+    
+    Returns:
+        RobotConnectionManager: Экземпляр менеджера соединений
+    """
+    global _connection_manager
+    if _connection_manager is None:
+        _connection_manager = RobotConnectionManager()
+    return _connection_manager

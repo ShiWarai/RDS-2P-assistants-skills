@@ -7,9 +7,7 @@ import uvicorn
 from fastapi import FastAPI
 
 from app.api.routes import router
-from app.services.robot_service import RobotService
-from app.services.binding_service import BindingService
-from app.services.grpc_service import serve_grpc
+from app.infrastructure.external.grpc_server import serve_grpc
 
 # Настройка логирования
 import os
@@ -38,15 +36,17 @@ logger = logging.getLogger(__name__)
 # Создание приложения FastAPI
 app = FastAPI(title="Robot Panda SmartApp API", version="1.0.0")
 
-# Инициализация сервисов (глобальные экземпляры)
-robot_service = RobotService()
-binding_service = BindingService()
+# Создаём binding_repository для нового gRPC сервера
+from app.infrastructure.persistence.redis_binding_repository import RedisBindingRepository
+from app.infrastructure.config.settings import settings
+
+binding_repository = RedisBindingRepository(settings.REDIS_URL)
 
 # Запуск gRPC сервера в отдельном потоке
 grpc_port = 50051
 grpc_thread = threading.Thread(
     target=serve_grpc,
-    args=(binding_service, grpc_port),
+    args=(binding_repository, grpc_port),
     daemon=True,
     name="gRPC-Server"
 )
