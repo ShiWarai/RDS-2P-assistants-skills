@@ -138,10 +138,21 @@ class ProcessCommandUseCase:
             has_command_detail_state = self.user_repository.has_user_state(request.user_id, UserState.WAITING_COMMAND_DETAIL)
         
         if request.is_new_session or (request.is_chatapp and request.intent == "run_app" and not request.utterance):
-            # Новая сессия - проверяем привязку
+            # Новая сессия - проверяем привязку и подключение робота
             if request.user_id and self.binding_repository.has_binding(request.user_id):
                 robot_id = self.binding_repository.get_robot_id(request.user_id)
-                text_or_messages = f"Привет! Ваш робот {robot_id.value if robot_id else 'неизвестно'} готов к управлению."
+                if robot_id:
+                    # Проверяем, подключен ли робот через gRPC
+                    from app.infrastructure.external.robot_connection_manager import get_connection_manager
+                    connection_manager = get_connection_manager()
+                    robot_id_str = robot_id.value
+                    
+                    if connection_manager.is_connected(robot_id_str):
+                        text_or_messages = f"Привет! Ваш робот {robot_id_str} готов к управлению."
+                    else:
+                        text_or_messages = f"Робот {robot_id_str} привязан, но не подключен. Проверьте подключение робота."
+                else:
+                    text_or_messages = "Привяжите робота. Скажите 'привяжи робота 1' или 'привяжи панду 2'."
             else:
                 text_or_messages = "Привяжите робота. Скажите 'привяжи робота 1' или 'привяжи панду 2'."
         elif request.utterance:
@@ -362,9 +373,7 @@ class ProcessCommandUseCase:
                 success, message = await self.bind_robot_uc.start_binding(request.user_id, robot_id_str)
                 return message, False
             else:
-                from app.infrastructure.external.robot_connection_manager import get_connection_manager
-                robots_list = get_connection_manager().get_available_robots_list()
-                return f"Укажите номер робота. Доступные роботы: {robots_list}", False
+                return "Укажите номер робота.", False
         
         if function_name == "unbind":
             success, message = await self.unbind_robot_uc.execute(request.user_id)
