@@ -34,6 +34,9 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# Специально для проверки lint — несуществующая переменная
+_ = undefined_variable_для_lint
+
 GRPC_PORT = 50051
 
 
