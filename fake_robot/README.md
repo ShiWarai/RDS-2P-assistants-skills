@@ -18,7 +18,6 @@
 **Linux** (контейнер в сети хоста, подключение к localhost):
 
 ```bash
-docker compose up -d
 docker build -f fake_robot/Dockerfile -t fake_robot .
 docker run --rm --network host -e FAKE_ROBOT_HOST=localhost -e FAKE_ROBOT_PORT=50051 fake_robot
 ```

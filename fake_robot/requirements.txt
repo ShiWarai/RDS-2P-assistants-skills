@@ -1,4 +1,3 @@
-# Минимальные зависимости только для fake_robot (без установки в системный Python).
-# Установка в venv: pip install -r fake_robot/requirements.txt
 grpcio>=1.50.0
+grpcio-tools>=1.50.0
 protobuf>=4.21.0

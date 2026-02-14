@@ -5,9 +5,10 @@ FROM python:3.10-slim
 WORKDIR /app
 
 # Зависимости для gRPC и генерации proto
-RUN pip install --no-cache-dir grpcio grpcio-tools protobuf
+COPY fake_robot/requirements.txt ./fake_robot/
+RUN pip install --no-cache-dir -r fake_robot/requirements.txt
 
-# Proto и генерация (контекст сборки — корень репозитория)
+# Proto и генерация
 COPY grpc_proto/ ./grpc_proto/
 RUN python3 -m grpc_tools.protoc -I./grpc_proto --python_out=./grpc_proto --grpc_python_out=./grpc_proto ./grpc_proto/robot.proto && \
     sed -i 's/^import robot_pb2/from . import robot_pb2/' ./grpc_proto/robot_pb2_grpc.py
