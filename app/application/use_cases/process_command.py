@@ -228,8 +228,10 @@ class ProcessCommandUseCase:
         has_command_detail_state: bool
     ) -> tuple[Union[str, List[str]], bool]:
         """Обрабатывает команду в режиме привязки"""
+        if not request.user_id:
+            return "Не удалось определить пользователя.", False
         utterance_lower = request.utterance.lower().strip()
-        
+
         if has_help_state:
             if "служеб" in utterance_lower:
                 text = self.get_help_uc.get_service_commands_help()
@@ -371,7 +373,8 @@ class ProcessCommandUseCase:
         
         # Обрабатываем команды привязки/отвязки
         if function_name == "bind":
-            # Извлекаем номер робота из utterance
+            if not request.user_id:
+                return "Не удалось выполнить привязку. Нет данных пользователя.", False
             from app.utils.request_parser import extract_robot_id_from_bind_command
             robot_id_str = extract_robot_id_from_bind_command(request.utterance)
             if robot_id_str:
@@ -379,8 +382,10 @@ class ProcessCommandUseCase:
                 return message, False
             else:
                 return "Укажите номер робота.", False
-        
+
         if function_name == "unbind":
+            if not request.user_id:
+                return "У вас нет привязанного робота.", False
             success, message = await self.unbind_robot_uc.execute(request.user_id)
             return message, False
 

@@ -108,8 +108,17 @@ RDS-2P-Salute/
 ├── fake_robot/             # Имитатор робота для тестов (gRPC-клиент, id=0)
 ├── grpc_proto/             # Protobuf определения для роботов
 ├── logs/                   # Логи приложения
+├── tests/                  # Unit- и интеграционные тесты (pytest)
+│   ├── mocks/              # Моки (классификатор, репозитории, робот)
+│   ├── unit/
+│   └── integration/
 ├── requirements.txt        # Зависимости
-└── docker-compose.yml      # Конфигурация Docker
+├── requirements-dev.txt   # Зависимости для тестов и линта (pytest, ruff, fakeredis)
+├── pytest.ini              # Конфигурация pytest
+├── ruff.toml               # Конфигурация линтера
+├── docker-compose.yml      # Конфигурация Docker
+├── docker-compose.dev.yml  # Dev-образ для тестов и линта
+└── Dockerfile.dev         # Образ с pytest и ruff
 ```
 
 ---
@@ -145,6 +154,43 @@ docker compose up -d
 3. **Удаление тома**  
    Команда **`docker compose down -v`** удаляет тома — после следующего `up` Redis будет пустой. Для обычного перезапуска лучше без `-v`:  
    `docker compose down && docker compose up --build -d`
+
+---
+
+## 🧪 Тесты и CI
+
+Тесты не используют реальный CVC и Redis: применяются моки и fakeredis.
+
+### Запуск тестов локально (Docker)
+
+```bash
+docker network create robot-services-network 2>/dev/null || true
+docker compose -f docker-compose.yml build app
+docker compose -f docker-compose.yml -f docker-compose.dev.yml build rds-2p-salute-dev
+
+# Линт
+docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm rds-2p-salute-dev ruff check .
+
+# Unit- и интеграционные тесты
+docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm rds-2p-salute-dev pytest tests/unit tests/integration -v --cov=app
+```
+
+### Запуск тестов без Docker
+
+```bash
+pip install -r requirements-dev.txt
+pytest tests/unit tests/integration -v --cov=app
+```
+
+### CI/CD (GitHub Actions)
+
+Workflow **`.github/workflows/tests.yml`** при push/PR в `main` или `dev`:
+
+- сборка образов `app` и dev;
+- линт (ruff);
+- pytest с отчётом покрытия;
+- загрузка coverage в Codecov (опционально);
+- уведомления в Telegram при успехе/падении (секреты `TELEGRAM_TOKEN`, `TELEGRAM_TO`).
 
 ---
 
