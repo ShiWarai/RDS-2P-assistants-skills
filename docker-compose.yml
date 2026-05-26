@@ -4,16 +4,28 @@ services:
   redis:
     image: redis:7-alpine
     container_name: rds-2p-salute-redis
-    command: redis-server --appendonly yes --dir /data
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --dir
+      - /data
+      - --requirepass
+      - "${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env — see .env.example}"
     volumes:
       - redis_data:/data
-    ports:
-      - "6379:6379"
     restart: unless-stopped
     networks:
       - robot-services-network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test:
+        [
+          "CMD",
+          "redis-cli",
+          "-a",
+          "${REDIS_PASSWORD}",
+          "ping",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -28,12 +40,11 @@ services:
       - "20000:8000"
       - "50051:50051"
     volumes:
-      - ./app:/app/app
-      - ./logs:/app/logs
+      - app_logs:/app/logs
     environment:
       - PYTHONUNBUFFERED=1
       - CVC_SERVICE_URL=http://cvc-api:20001
-      - REDIS_URL=redis://redis:6379/0
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
     restart: unless-stopped
     depends_on:
       redis:
@@ -49,6 +60,7 @@ services:
 
 volumes:
   redis_data:
+  app_logs:
 
 networks:
   robot-services-network:

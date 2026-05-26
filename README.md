@@ -1,9 +1,9 @@
 # RDS-2P-Salute
 
 [![Tests](https://github.com/ShiWarai/RDS-2P-Salute/actions/workflows/tests.yml/badge.svg)](https://github.com/ShiWarai/RDS-2P-Salute/actions/workflows/tests.yml)
-[![Python 3.10](https://img.shields.io/badge/python-3.10-blue.svg)](https://www.python.org/downloads/)
-[![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://www.docker.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/github/license/ShiWarai/RDS-2P-Salute)](https://opensource.org/licenses/MIT)
+![Python Version](https://img.shields.io/badge/python-3.10-blue)
+![Docker Ready](https://img.shields.io/badge/docker-ready-blue?logo=docker)
 
 Сервер веб-хуков для управления роботом-пандой через голосовые команды в виртуальном ассистенте Сбер Салют. Привязка пользователь ↔ робот, классификация намерений через CVC, доставка команд роботам по gRPC.
 
@@ -37,7 +37,11 @@
 
 ## Быстрый старт
 
-1. При необходимости создайте `.env` (например `REDIS_URL`, `CVC_SERVICE_URL` — см. [Установка и запуск](#установка-и-запуск)).
+1. Создайте `.env` из примера и задайте **`REDIS_PASSWORD`** (обязательно для `docker compose up`):
+   ```bash
+   cp .env.example .env
+   # Отредактируйте REDIS_PASSWORD, например: openssl rand -hex 32
+   ```
 2. Соберите и запустите контейнеры:
    ```bash
    docker compose up -d
@@ -52,8 +56,8 @@
 
 ### Docker (рекомендуется)
 
-- Запуск: `docker compose up -d`. Сервисы: приложение (порты 20000, 50051), Redis.
-- Переменные окружения задаются в `docker-compose.yml` или через `.env` (например `REDIS_URL`, `CVC_SERVICE_URL` для адреса CVC).
+- **Локальная разработка / сборка:** `docker compose up -d`. Сервисы: приложение (порты 20000, 50051), Redis.
+- **Продакшен (образ из GHCR):** `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`. Переопределяет только сервис `app` (образ из registry, без сборки). Предварительно: `docker pull ghcr.io/shiwarai/rds-2p-salute-app:main`.
 
 ### Тестирование без реального робота
 
@@ -66,6 +70,14 @@
 - В `docker-compose.yml` задано **`name: rds-2p-salute`**, поэтому том один и тот же с любого пути запуска.
 - Redis пишет AOF в **`--dir /data`** (смонтированный том).
 - Команда **`docker compose down -v`** удаляет тома — после следующего `up` Redis будет пустой. Для обычного перезапуска: `docker compose down && docker compose up --build -d`.
+
+### Безопасность Redis
+
+- **Порт 6379 наружу не публикуется** — приложение подключается к Redis только по внутренней сети Docker.
+- Включён **`requirepass`**, пароль задаётся в `.env` как **`REDIS_PASSWORD`**; в `REDIS_URL` для сервиса `app` пароль подставляется автоматически.
+- В логах приложения URL Redis выводится **без пароля** (маскировка).
+
+После обновления с версии без пароля: положите `REDIS_PASSWORD` в `.env` и выполните `docker compose up -d` (при необходимости пересоздайте контейнер Redis). Старые данные в томе `redis_data` сохраняются; Redis при старте просто начнёт требовать пароль.
 
 ---
 
@@ -192,7 +204,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml build rds-2p-salu
 docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm -T rds-2p-salute-dev ruff check .
 
 # Unit- и интеграционные тесты
-docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm -T rds-2p-salute-dev pytest tests/unit tests/integration -v --tb=short --cov=app --cov-report=term-missing
+docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm -T rds-2p-salute-dev pytest tests/ -v --tb=short --cov=app --cov-report=term-missing
 ```
 
 Тесты используют моки и fakeredis, без реального CVC и Redis.
@@ -205,7 +217,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm -T rds-2
 
 | Workflow | Триггер | Назначение |
 | -------- | ------- | ---------- |
-| **Tests** (`tests.yml`) | Push в `main` или `dev`, ручной запуск | Сборка образов app и dev, линт (ruff), pytest с покрытием, загрузка coverage в Codecov (опционально), уведомления в Telegram при успехе/падении |
+| **Tests** (`tests.yml`) | Push в `main` или `dev`, ручной запуск | Сборка образов app и dev, линт (ruff), pytest с покрытием, уведомления в Telegram при успехе/падении |
 | **Publish** (`publish.yml`) | Завершение Tests на ветке `main` (только при успехе) | Сборка и публикация образа в GitHub Container Registry (GHCR) |
 
 ### Публикация образа

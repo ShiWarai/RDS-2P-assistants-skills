@@ -1,0 +1,6 @@
+services:
+  app:
+    image: ghcr.io/shiwarai/rds-2p-salute-app:main
+    build: !reset null
+    environment:
+      - CVC_SERVICE_URL=${CVC_SERVICE_URL:-http://cvc-api:20001}
