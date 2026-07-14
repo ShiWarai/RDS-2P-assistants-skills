@@ -65,15 +65,22 @@ class HandleBindingFlowUseCase:
         
         # Если код не извлечён или выглядит подозрительно, пробуем извлечь из tokenized
         if (not code or (code and len(set(code)) == 1)) and message:
-            logger.debug(f"Код не извлечён или подозрителен ({code}), пробуем tokenized_elements_list")
+            logger.debug("Код не извлечён или подозрителен (%s), пробуем tokenized/NLU", code)
             tokenized = message.get("tokenized_elements_list", [])
-            logger.debug(f"Tokenized elements для кода: {tokenized}")
-            
             number_tokens = extract_number_tokens_from_tokenized(tokenized)
-            
+
+            if len(number_tokens) != 4:
+                nlu = message.get("nlu", {})
+                nlu_numbers = []
+                for entity in nlu.get("entities", []):
+                    if entity.get("type") == "YANDEX.NUMBER":
+                        nlu_numbers.append(str(int(entity.get("value"))))
+                if len(nlu_numbers) == 4:
+                    number_tokens = nlu_numbers
+
             if len(number_tokens) == 4:
-                code = ''.join(number_tokens)
-                logger.debug(f"Код извлечён из токенов: {code}")
+                code = "".join(number_tokens)
+                logger.debug("Код извлечён из токенов/NLU: %s", code)
         
         logger.debug(f"Извлеченный код: {code}")
         

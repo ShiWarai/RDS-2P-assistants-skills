@@ -1,0 +1,1 @@
+"""Salute platform adapter."""

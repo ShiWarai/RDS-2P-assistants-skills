@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0brobot.proto\x12\x05robot\"\'\n\x13RobotConnectRequest\x12\x10\n\x08robot_id\x18\x01 \x01(\t\"\xbe\x01\n\rStreamMessage\x12\x31\n\x0c\x62inding_code\x18\x01 \x01(\x0b\x32\x19.robot.BindingCodeMessageH\x00\x12!\n\x07\x63ommand\x18\x02 \x01(\x0b\x32\x0e.robot.CommandH\x00\x12$\n\x05\x65rror\x18\x03 \x01(\x0b\x32\x13.robot.ErrorMessageH\x00\x12&\n\x06status\x18\x04 \x01(\x0b\x32\x14.robot.StatusMessageH\x00\x42\t\n\x07message\"6\n\x12\x42indingCodeMessage\x12\x0c\n\x04\x63ode\x18\x01 \x01(\t\x12\x12\n\nexpires_at\x18\x02 \x01(\x03\"F\n\x07\x43ommand\x12\x14\n\x0c\x63ommand_text\x18\x01 \x01(\t\x12\x11\n\ttimestamp\x18\x02 \x01(\x03\x12\x12\n\ncommand_id\x18\x03 \x01(\t\"9\n\x0c\x45rrorMessage\x12\x12\n\nerror_code\x18\x01 \x01(\t\x12\x15\n\rerror_message\x18\x02 \x01(\t\"0\n\rStatusMessage\x12\x0e\n\x06status\x18\x01 \x01(\t\x12\x0f\n\x07message\x18\x02 \x01(\t2[\n\x13RobotCommandService\x12\x44\n\x0eStreamCommands\x12\x1a.robot.RobotConnectRequest\x1a\x14.robot.StreamMessage0\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0brobot.proto\x12\x05robot\"\'\n\x13RobotConnectRequest\x12\x10\n\x08robot_id\x18\x01 \x01(\t\"\xbe\x01\n\rStreamMessage\x12\x31\n\x0c\x62inding_code\x18\x01 \x01(\x0b\x32\x19.robot.BindingCodeMessageH\x00\x12!\n\x07\x63ommand\x18\x02 \x01(\x0b\x32\x0e.robot.CommandH\x00\x12$\n\x05\x65rror\x18\x03 \x01(\x0b\x32\x13.robot.ErrorMessageH\x00\x12&\n\x06status\x18\x04 \x01(\x0b\x32\x14.robot.StatusMessageH\x00\x42\t\n\x07message\"6\n\x12\x42indingCodeMessage\x12\x0c\n\x04\x63ode\x18\x01 \x01(\t\x12\x12\n\nexpires_at\x18\x02 \x01(\x03\"F\n\x07\x43ommand\x12\x14\n\x0c\x63ommand_text\x18\x01 \x01(\t\x12\x11\n\ttimestamp\x18\x02 \x01(\x03\x12\x12\n\ncommand_id\x18\x03 \x01(\t\"9\n\x0c\x45rrorMessage\x12\x12\n\nerror_code\x18\x01 \x01(\t\x12\x15\n\rerror_message\x18\x02 \x01(\t\"0\n\rStatusMessage\x12\x0e\n\x06status\x18\x01 \x01(\t\x12\x0f\n\x07message\x18\x02 \x01(\t\"<\n\x12SendCommandRequest\x12\x10\n\x08robot_id\x18\x01 \x01(\t\x12\x14\n\x0c\x63ommand_text\x18\x02 \x01(\t\"7\n\x13SendCommandResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\"*\n\x16InitiateBindingRequest\x12\x10\n\x08robot_id\x18\x01 \x01(\t\"]\n\x17InitiateBindingResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x0c\n\x04\x63ode\x18\x03 \x01(\t\x12\x12\n\nexpires_at\x18\x04 \x01(\x03\"A\n\x1cNotifyBindingCompleteRequest\x12\x10\n\x08robot_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\"A\n\x1dNotifyBindingCompleteResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\"+\n\x17IsRobotConnectedRequest\x12\x10\n\x08robot_id\x18\x01 \x01(\t\"-\n\x18IsRobotConnectedResponse\x12\x11\n\tconnected\x18\x01 \x01(\x08\"\x1c\n\x1aListConnectedRobotsRequest\"0\n\x1bListConnectedRobotsResponse\x12\x11\n\trobot_ids\x18\x01 \x03(\t2[\n\x13RobotCommandService\x12\x44\n\x0eStreamCommands\x12\x1a.robot.RobotConnectRequest\x1a\x14.robot.StreamMessage0\x01\x32\xc3\x03\n\x12SkillBridgeService\x12\x44\n\x0bSendCommand\x12\x19.robot.SendCommandRequest\x1a\x1a.robot.SendCommandResponse\x12P\n\x0fInitiateBinding\x12\x1d.robot.InitiateBindingRequest\x1a\x1e.robot.InitiateBindingResponse\x12\x62\n\x15NotifyBindingComplete\x12#.robot.NotifyBindingCompleteRequest\x1a$.robot.NotifyBindingCompleteResponse\x12S\n\x10IsRobotConnected\x12\x1e.robot.IsRobotConnectedRequest\x1a\x1f.robot.IsRobotConnectedResponse\x12\\\n\x13ListConnectedRobots\x12!.robot.ListConnectedRobotsRequest\x1a\".robot.ListConnectedRobotsResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -43,6 +43,28 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_ERRORMESSAGE']._serialized_end=441
   _globals['_STATUSMESSAGE']._serialized_start=443
   _globals['_STATUSMESSAGE']._serialized_end=491
-  _globals['_ROBOTCOMMANDSERVICE']._serialized_start=493
-  _globals['_ROBOTCOMMANDSERVICE']._serialized_end=584
+  _globals['_SENDCOMMANDREQUEST']._serialized_start=493
+  _globals['_SENDCOMMANDREQUEST']._serialized_end=553
+  _globals['_SENDCOMMANDRESPONSE']._serialized_start=555
+  _globals['_SENDCOMMANDRESPONSE']._serialized_end=610
+  _globals['_INITIATEBINDINGREQUEST']._serialized_start=612
+  _globals['_INITIATEBINDINGREQUEST']._serialized_end=654
+  _globals['_INITIATEBINDINGRESPONSE']._serialized_start=656
+  _globals['_INITIATEBINDINGRESPONSE']._serialized_end=749
+  _globals['_NOTIFYBINDINGCOMPLETEREQUEST']._serialized_start=751
+  _globals['_NOTIFYBINDINGCOMPLETEREQUEST']._serialized_end=816
+  _globals['_NOTIFYBINDINGCOMPLETERESPONSE']._serialized_start=818
+  _globals['_NOTIFYBINDINGCOMPLETERESPONSE']._serialized_end=883
+  _globals['_ISROBOTCONNECTEDREQUEST']._serialized_start=885
+  _globals['_ISROBOTCONNECTEDREQUEST']._serialized_end=928
+  _globals['_ISROBOTCONNECTEDRESPONSE']._serialized_start=930
+  _globals['_ISROBOTCONNECTEDRESPONSE']._serialized_end=975
+  _globals['_LISTCONNECTEDROBOTSREQUEST']._serialized_start=977
+  _globals['_LISTCONNECTEDROBOTSREQUEST']._serialized_end=1005
+  _globals['_LISTCONNECTEDROBOTSRESPONSE']._serialized_start=1007
+  _globals['_LISTCONNECTEDROBOTSRESPONSE']._serialized_end=1055
+  _globals['_ROBOTCOMMANDSERVICE']._serialized_start=1057
+  _globals['_ROBOTCOMMANDSERVICE']._serialized_end=1148
+  _globals['_SKILLBRIDGESERVICE']._serialized_start=1151
+  _globals['_SKILLBRIDGESERVICE']._serialized_end=1602
 # @@protoc_insertion_point(module_scope)

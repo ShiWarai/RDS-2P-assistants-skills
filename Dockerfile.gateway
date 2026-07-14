@@ -1,0 +1,17 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY grpc_proto/ ./grpc_proto/
+RUN python3 -m grpc_tools.protoc -I./grpc_proto --python_out=./grpc_proto --grpc_python_out=./grpc_proto ./grpc_proto/robot.proto && \
+    test -f ./grpc_proto/robot_pb2.py && test -f ./grpc_proto/robot_pb2_grpc.py && \
+    sed -i 's/^import robot_pb2/from . import robot_pb2/' ./grpc_proto/robot_pb2_grpc.py
+
+COPY gateway/ ./gateway/
+
+EXPOSE 50051
+
+CMD ["python", "-m", "gateway.main"]

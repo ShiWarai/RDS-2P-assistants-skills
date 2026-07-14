@@ -7,11 +7,15 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.api.routes import (
-    router,
-    get_process_command_use_case,
-    get_command_feedback_repository,
+from app.api.common_routes import (
     require_local_network,
+    get_command_feedback_repository,
+    router as common_router,
+)
+from app.platforms.salute.routes import router as salute_router, get_process_command_use_case
+from app.platforms.alice.routes import (
+    router as alice_router,
+    get_process_command_use_case as get_alice_process_command_use_case,
 )
 from app.application.use_cases.process_command import ProcessCommandUseCase
 from app.application.use_cases.bind_robot import BindRobotUseCase
@@ -33,7 +37,6 @@ def _create_test_process_command_use_case(
     user_repo=None,
     command_feedback_repo=None,
 ):
-    """Создаёт ProcessCommandUseCase с моками (без CVC, без Redis)."""
     binding_repo = binding_repo or InMemoryBindingRepository()
     user_repo = user_repo or InMemoryUserRepository()
     command_feedback_repo = command_feedback_repo or InMemoryCommandFeedbackRepository()
@@ -63,9 +66,7 @@ def _create_test_process_command_use_case(
     )
 
 
-@pytest.fixture
-def app_client():
-    """TestClient с переопределёнными зависимостями."""
+def _make_client(router, get_uc):
     shared_states: dict = {}
     binding_repo = InMemoryBindingRepository(shared_user_states=shared_states)
     user_repo = InMemoryUserRepository(shared_states=shared_states)
@@ -77,6 +78,7 @@ def app_client():
         yield
 
     app = FastAPI(title="Test API", lifespan=test_lifespan)
+    app.include_router(common_router)
     app.include_router(router)
 
     use_case = _create_test_process_command_use_case(
@@ -84,9 +86,22 @@ def app_client():
         user_repo=user_repo,
         command_feedback_repo=command_feedback_repo,
     )
-    app.dependency_overrides[get_process_command_use_case] = lambda: use_case
+    app.dependency_overrides[get_uc] = lambda: use_case
     app.dependency_overrides[get_command_feedback_repository] = lambda: command_feedback_repo
     app.dependency_overrides[require_local_network] = lambda request=None: None
 
-    with TestClient(app) as client:
+    return TestClient(app)
+
+
+@pytest.fixture
+def app_client():
+    """TestClient для Salute webhook."""
+    with _make_client(salute_router, get_process_command_use_case) as client:
+        yield client
+
+
+@pytest.fixture
+def alice_client():
+    """TestClient для Alice webhook."""
+    with _make_client(alice_router, get_alice_process_command_use_case) as client:
         yield client

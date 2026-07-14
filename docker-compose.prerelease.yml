@@ -1,0 +1,13 @@
+# Тестовое окружение: образы с тегом :prerelease из GHCR.
+# Предварительно: docker pull ghcr.io/shiwarai/rds-2p-assistants-skills-*:prerelease
+services:
+  robot-gateway:
+    image: ghcr.io/shiwarai/rds-2p-assistants-skills-robot-gateway:prerelease
+
+  salute:
+    image: ghcr.io/shiwarai/rds-2p-assistants-skills-salute:prerelease
+    build: !override null
+
+  alice:
+    image: ghcr.io/shiwarai/rds-2p-assistants-skills-alice:prerelease
+    build: !override null

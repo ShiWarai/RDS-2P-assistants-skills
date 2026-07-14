@@ -4,6 +4,7 @@ Unit-тесты для ProcessCommandUseCase.
 import pytest
 
 from app.application.dto.command_request import CommandRequestDTO
+from app.domain.value_objects.platform import Platform
 
 pytestmark = pytest.mark.unit
 
@@ -51,7 +52,7 @@ async def test_cvc_unavailable_returns_message(
         intent="",
         data={},
         message=None,
-        is_chatapp=False,
+        platform=Platform.SALUTE_LEGACY,
     )
     resp = await uc.execute(req)
     assert "недоступен" in resp.text.lower() or "временно" in resp.text.lower()
@@ -67,7 +68,7 @@ async def test_help_returns_menu(process_command_use_case):
         intent="",
         data={},
         message=None,
-        is_chatapp=False,
+        platform=Platform.SALUTE_LEGACY,
     )
     resp = await process_command_use_case.execute(req)
     assert "служебн" in resp.text.lower() or "раздел" in resp.text.lower()
@@ -87,7 +88,7 @@ async def test_bind_with_robot_id_calls_start_binding(
         intent="",
         data={},
         message=None,
-        is_chatapp=False,
+        platform=Platform.SALUTE_LEGACY,
     )
     resp = await process_command_use_case.execute(req)
     assert "код" in resp.text.lower() or "привяз" in resp.text.lower()
@@ -110,7 +111,7 @@ async def test_unbind_calls_unbind(
         intent="",
         data={},
         message=None,
-        is_chatapp=False,
+        platform=Platform.SALUTE_LEGACY,
     )
     resp = await process_command_use_case.execute(req)
     assert not mock_binding_repo.has_binding("user1")
@@ -129,7 +130,7 @@ async def test_command_without_binding_returns_message(
         intent="",
         data={},
         message=None,
-        is_chatapp=False,
+        platform=Platform.SALUTE_LEGACY,
     )
     resp = await process_command_use_case.execute(req)
     assert "привяж" in resp.text.lower() or "робот" in resp.text.lower()
@@ -152,7 +153,7 @@ async def test_command_with_binding_sends_to_robot(
         intent="",
         data={},
         message=None,
-        is_chatapp=False,
+        platform=Platform.SALUTE_LEGACY,
     )
     resp = await process_command_use_case.execute(req)
     assert mock_robot_connector.sent_commands

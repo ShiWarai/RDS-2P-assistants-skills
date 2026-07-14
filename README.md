@@ -1,11 +1,11 @@
-# RDS-2P-Salute
+# RDS-2P-assistants-skills
 
-[![Tests](https://github.com/ShiWarai/RDS-2P-Salute/actions/workflows/tests.yml/badge.svg)](https://github.com/ShiWarai/RDS-2P-Salute/actions/workflows/tests.yml)
-[![License: MIT](https://img.shields.io/github/license/ShiWarai/RDS-2P-Salute)](https://opensource.org/licenses/MIT)
+[![Deploy](https://github.com/ShiWarai/RDS-2P-assistants-skills/actions/workflows/deploy.yml/badge.svg)](https://github.com/ShiWarai/RDS-2P-assistants-skills/actions/workflows/deploy.yml)
+[![License: MIT](https://img.shields.io/github/license/ShiWarai/RDS-2P-assistants-skills)](https://opensource.org/licenses/MIT)
 ![Python Version](https://img.shields.io/badge/python-3.10-blue)
 ![Docker Ready](https://img.shields.io/badge/docker-ready-blue?logo=docker)
 
-Сервер веб-хуков для управления роботом-пандой через голосовые команды в виртуальном ассистенте Сбер Салют. Привязка пользователь ↔ робот, классификация намерений через CVC, доставка команд роботам по gRPC.
+Сервер веб-хуков для управления роботом-пандой через голосовые команды в **Сбер Салют** и **Яндекс Алису**. Привязка пользователь ↔ робот, классификация намерений через CVC, доставка команд роботам через внутрикластерный **robot-gateway** (gRPC).
 
 ## Стек технологий
 
@@ -46,7 +46,7 @@
    ```bash
    docker compose up -d
    ```
-3. HTTP API: **http://localhost:20000**, gRPC: порт **50051**. Документация: http://localhost:20000/docs
+3. **Salute:** http://localhost:20000 · **Alice:** http://localhost:20002 · **robot-gateway (gRPC):** порт **50051**. Документация Salute: http://localhost:20000/docs
 
 Остановка: `docker compose down` (без `-v`, чтобы не удалять данные Redis).
 
@@ -56,18 +56,27 @@
 
 ### Docker (рекомендуется)
 
-- **Локальная разработка / сборка:** `docker compose up -d`. Сервисы: приложение (порты 20000, 50051), Redis.
-- **Продакшен (образ из GHCR):** `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`. Переопределяет только сервис `app` (образ из registry, без сборки). Предварительно: `docker pull ghcr.io/shiwarai/rds-2p-salute-app:main`.
+- **Локальная разработка / сборка:** `docker compose up -d`. Сервисы: `robot-gateway` (50051), `salute` (20000), `alice` (20002), Redis.
+- **Продакшен (образы из GHCR):** `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`. Предварительно:
+  ```bash
+  docker pull ghcr.io/shiwarai/rds-2p-assistants-skills-robot-gateway:main
+  docker pull ghcr.io/shiwarai/rds-2p-assistants-skills-salute:main
+  docker pull ghcr.io/shiwarai/rds-2p-assistants-skills-alice:main
+  ```
 
 ### Тестирование без реального робота
 
-В каталоге **fake_robot/** — имитатор робота (gRPC-клиент с `robot_id=0`). После `docker compose up -d` соберите и запустите контейнер имитатора: приложение будет считать робота подключённым, в консоли имитатора отображаются код привязки и команды. Подробно: [fake_robot/README.md](fake_robot/README.md).
+В каталоге **fake_robot/** — имитатор робота (gRPC-клиент с `robot_id=0`). После `docker compose up -d` запустите имитатор с хостом **robot-gateway** (порт 50051): робот будет виден навыкам salute и alice. Подробно: [fake_robot/README.md](fake_robot/README.md).
+
+### Навык Алисы
+
+Webhook для [Яндекс Диалогов](https://yandex.ru/dev/dialogs/alice/doc/ru/): укажите в консоли backend `https://<host>/v1/webhook` (сервис **alice**, порт 20002 локально).
 
 ### Почему могут пропадать привязки после перезапуска
 
 Привязки хранятся в Redis в томе **redis_data**.
 
-- В `docker-compose.yml` задано **`name: rds-2p-salute`**, поэтому том один и тот же с любого пути запуска.
+- В `docker-compose.yml` задано **`name: rds-2p-assistants-skills`**, поэтому том один и тот же с любого пути запуска.
 - Redis пишет AOF в **`--dir /data`** (смонтированный том).
 - Команда **`docker compose down -v`** удаляет тома — после следующего `up` Redis будет пустой. Для обычного перезапуска: `docker compose down && docker compose up --build -d`.
 
@@ -157,54 +166,55 @@ graph TD
 
 | Метод | Путь | Описание |
 | ----- | ---- | -------- |
-| POST | /v1/webhook | Вход для SmartApp API (Сбер Салют) |
+| POST | /v1/webhook | Вход для SmartApp API (Salute) или Яндекс Диалогов (Alice) |
 | GET | /v1/health | Проверка состояния сервера |
-| GET | /v1/admin/bindings | Список привязок пользователь → робот (ограничение доступа) |
-| GET | /v1/admin/command-feedback | Репорты «исправить команду» (ограничение доступа) |
+| GET | /v1/admin/command-feedback | Репорты «исправить команду» (только локальная сеть) |
 | GET | /docs | Swagger UI |
+
+Salute: сервис `salute` (:20000). Alice: сервис `alice` (:20002). Роботы подключаются к `robot-gateway` (:50051).
 
 ---
 
 ## Структура проекта
 
 ```
-RDS-2P-Salute/
+RDS-2P-assistants-skills/
 ├── app/
-│   ├── api/                # Роуты FastAPI
+│   ├── api/                # Общие роуты (health, admin)
+│   ├── platforms/
+│   │   ├── salute/         # Webhook Salute
+│   │   └── alice/          # Webhook Алисы
 │   ├── application/        # Use Cases, DTO
-│   ├── domain/             # Сущности, интерфейсы, value objects
-│   ├── infrastructure/     # Redis, gRPC, CVC-клиент, конфиг
-│   ├── utils/
-│   └── main.py
-├── fake_robot/             # Имитатор робота (gRPC, robot_id=0)
-├── grpc_proto/             # Protobuf для роботов
-├── tests/                  # unit, integration, mocks
+│   ├── domain/
+│   ├── infrastructure/     # Redis, CVC, remote gateway client
+│   ├── main_salute.py
+│   └── main_alice.py
+├── gateway/                # robot-gateway (gRPC для роботов + SkillBridge)
+├── fake_robot/
+├── grpc_proto/
+├── tests/
 ├── docker-compose.yml
-├── docker-compose.dev.yml  # Dev-образ (pytest, ruff)
-├── Dockerfile
+├── Dockerfile.salute
+├── Dockerfile.alice
+├── Dockerfile.gateway
 ├── Dockerfile.dev
-├── requirements.txt
-├── requirements-dev.txt
-├── pytest.ini
-└── ruff.toml
+└── ...
 ```
 
 ---
 
 ## Тестирование
 
-Используется образ **rds-2p-salute-dev** (docker-compose.dev.yml):
+Используется образ **rds-2p-assistants-skills-dev** (`docker-compose.dev.yml`) — отдельный dev-образ только для линта и тестов, без prod-сервисов:
 
 ```bash
-docker network create robot-services-network 2>/dev/null || true
-docker compose -f docker-compose.yml build app
-docker compose -f docker-compose.yml -f docker-compose.dev.yml build rds-2p-salute-dev
+docker compose -f docker-compose.dev.yml build dev
 
 # Линт
-docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm -T rds-2p-salute-dev ruff check .
+docker compose -f docker-compose.dev.yml run --rm -T dev ruff check .
 
-# Unit- и интеграционные тесты
-docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm -T rds-2p-salute-dev pytest tests/ -v --tb=short --cov=app --cov-report=term-missing
+# Unit- и интеграционные тесты (Salute + Alice)
+docker compose -f docker-compose.dev.yml run --rm dev pytest tests/ -v --tb=short --cov=app --cov-report=term-missing
 ```
 
 Тесты используют моки и fakeredis, без реального CVC и Redis.
@@ -217,15 +227,38 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm -T rds-2
 
 | Workflow | Триггер | Назначение |
 | -------- | ------- | ---------- |
-| **Tests** (`tests.yml`) | Push в `main` или `dev`, ручной запуск | Сборка образов app и dev, линт (ruff), pytest с покрытием, уведомления в Telegram при успехе/падении |
-| **Publish** (`publish.yml`) | Завершение Tests на ветке `main` (только при успехе) | Сборка и публикация образа в GitHub Container Registry (GHCR) |
+| **Deploy** (`deploy.yml`) | Push в `main` или `dev` | Dev-образ, ruff + pytest |
+| **Deploy → prerelease** (`deploy.yml`, job `publish-prerelease`) | Push в `dev` с `[prerelease]` в коммите, или ручной запуск с `publish_prerelease` | Публикация gateway/salute/alice с тегом `:prerelease` |
+| **Publish** (`publish.yml`) | Успешный Deploy на `main` | Публикация с тегом `:main` |
 
-### Публикация образа
+### Prerelease (тестовое окружение)
 
-- Образ: `ghcr.io/shiwarai/rds-2p-salute-app:main` и по SHA коммита.
-- Собирается для **linux/amd64** и **linux/arm64** (например, для Orange Pi 5).
-- На сервере: `docker pull ghcr.io/shiwarai/rds-2p-salute-app:main`. После первого push в репозитории: **Packages** → `rds-2p-salute-app` → **Package settings** → **Change visibility** → **Public** (если нужен публичный доступ без логина).
-- Уведомление в Telegram при успешной публикации (секреты `TELEGRAM_TOKEN`, `TELEGRAM_TO`).
+По аналогии с `[retrain]` в [CVC](https://github.com/ShiWarai/CVC/blob/main/.github/workflows/deploy.yml): prod-образы публикуются **только по явному запросу**.
+
+1. **Автоматически:** commit в `dev` с меткой `[prerelease]` в сообщении, например:
+   ```bash
+   git commit -m "feat: alice webhook [prerelease]"
+   git push origin dev
+   ```
+   После успешных тестов в GHCR появятся теги `:prerelease` и `:<sha>`.
+
+2. **Вручную:** GitHub Actions → Deploy → Run workflow → включить `publish_prerelease`.
+
+На тестовом стенде:
+```bash
+docker pull ghcr.io/shiwarai/rds-2p-assistants-skills-robot-gateway:prerelease
+docker pull ghcr.io/shiwarai/rds-2p-assistants-skills-salute:prerelease
+docker pull ghcr.io/shiwarai/rds-2p-assistants-skills-alice:prerelease
+docker compose -f docker-compose.yml -f docker-compose.prerelease.yml up -d
+```
+
+### Публикация stable (main)
+
+- `ghcr.io/shiwarai/rds-2p-assistants-skills-robot-gateway:main`
+- `ghcr.io/shiwarai/rds-2p-assistants-skills-salute:main`
+- `ghcr.io/shiwarai/rds-2p-assistants-skills-alice:main`
+
+Сборка **linux/amd64** и **linux/arm64**. В k3s: один Deployment для gateway, отдельные для salute и alice; роботы снаружи подключаются к Service gateway.
 
 ---
 

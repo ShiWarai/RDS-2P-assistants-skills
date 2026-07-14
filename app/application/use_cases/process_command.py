@@ -11,13 +11,14 @@ from app.domain.repositories.command_feedback_repository import ICommandFeedback
 from app.domain.services.command_classifier import ICommandClassifier
 from app.domain.services.robot_connector import IRobotConnector
 from app.domain.value_objects.user_state import UserState
+from app.domain.value_objects.platform import Platform
 from app.application.dto.command_request import CommandRequestDTO
 from app.application.dto.command_response import CommandResponseDTO
 from app.application.use_cases.bind_robot import BindRobotUseCase
 from app.application.use_cases.unbind_robot import UnbindRobotUseCase
 from app.application.use_cases.get_help import GetHelpUseCase
 from app.application.use_cases.handle_binding_flow import HandleBindingFlowUseCase
-from app.utils.response_builder import create_chatapp_response, create_chatapp_response_multiple, create_legacy_response
+from app.platforms.responses import build_platform_response
 
 logger = logging.getLogger(__name__)
 
@@ -142,20 +143,27 @@ class ProcessCommandUseCase:
             has_help_state = self.user_repository.has_user_state(request.user_id, UserState.WAITING_HELP_SECTION)
             has_command_detail_state = self.user_repository.has_user_state(request.user_id, UserState.WAITING_COMMAND_DETAIL)
         
-        if request.is_new_session or (request.is_chatapp and request.intent == "run_app" and not request.utterance):
-            # Новая сессия - проверяем привязку и подключение робота
+        if request.is_new_session or (
+            request.platform.is_salute_chatapp
+            and request.intent == "run_app"
+            and not request.utterance
+        ):
             if request.user_id and self.binding_repository.has_binding(request.user_id):
                 robot_id = self.binding_repository.get_robot_id(request.user_id)
                 if robot_id:
-                    # Проверяем, подключен ли робот через gRPC
-                    from app.infrastructure.external.robot_connection_manager import get_connection_manager
-                    connection_manager = get_connection_manager()
                     robot_id_str = robot_id.value
-                    
-                    if connection_manager.is_connected(robot_id_str):
+                    connected = (
+                        self.robot_connector.is_robot_connected(robot_id_str)
+                        if hasattr(self.robot_connector, "is_robot_connected")
+                        else False
+                    )
+                    if connected:
                         text_or_messages = f"Привет! Ваш робот {robot_id_str} готов к управлению."
                     else:
-                        text_or_messages = f"Робот {robot_id_str} привязан, но не подключен. Проверьте подключение робота."
+                        text_or_messages = (
+                            f"Робот {robot_id_str} привязан, но не подключен. "
+                            "Проверьте подключение робота."
+                        )
                 else:
                     text_or_messages = "Привяжите робота. Скажите 'привяжи робота 1' или 'привяжи панду 2'."
             else:
@@ -172,53 +180,27 @@ class ProcessCommandUseCase:
                     request, has_help_state, has_command_detail_state
                 )
         else:
-            # Пустая команда
-            if request.is_chatapp:
+            if request.platform.is_salute or request.platform == Platform.ALICE:
                 if request.user_id and self.binding_repository.has_binding(request.user_id):
                     text_or_messages = "Скажите команду для робота. Для списка команд - 'помощь'."
                 else:
                     text_or_messages = "Привяжите робота. Скажите 'привяжи робота 1' или 'привяжи панду 2'."
             else:
                 text_or_messages = "Не понял команду."
-        
-        # Обрабатываем результат: может быть строка или список строк
-        if isinstance(text_or_messages, list):
-            # Множественные сообщения
-            if request.is_chatapp:
-                # Для ChatApp пытаемся использовать множественный формат, 
-                # но для надежности логируем объединение
-                response_payload = create_chatapp_response_multiple(request.data, text_or_messages, finished)
-                text = "\n".join(text_or_messages)
-            else:
-                # Для legacy API объединяем сообщения
-                text = " ".join(text_or_messages)
-                response_payload = create_legacy_response(text, request.session or {}, request.version, finished)
-        else:
-            # Одно сообщение
-            text = text_or_messages
-            if request.is_chatapp:
-                # Для команды "молчи" отключаем автопрослушивание (пауза диалога)
-                auto_listening = None
-                show_suggestions = False
-                
-                if "помолчим" in text.lower() and not finished:
-                    auto_listening = False
-                # Не показываем подсказки в режиме помощи или привязки
-                elif has_help_state or has_command_detail_state or has_binding_state:
-                    pass  # show_suggestions уже False
-                # Показываем подсказки только после успешных команд робота
-                # (определяем по тексту ответа из COMMANDS - содержит эмодзи и описание действия)
-                elif any(emoji in text for emoji in ["🐾", "🎖️", "✨", "💤", "🤸", "🏃", "🛑", "🎮"]) and not finished:
-                    show_suggestions = True
-                
-                response_payload = create_chatapp_response(request.data, text, finished, auto_listening, show_suggestions)
-            else:
-                response_payload = create_legacy_response(text, request.session or {}, request.version, finished)
-        
+
+        text, response_payload = build_platform_response(
+            request,
+            text_or_messages,
+            finished,
+            has_binding_state=has_binding_state,
+            has_help_state=has_help_state,
+            has_command_detail_state=has_command_detail_state,
+        )
+
         return CommandResponseDTO(
             text=text,
             finished=finished,
-            response_payload=response_payload
+            response_payload=response_payload,
         )
     
     async def _handle_binding_mode(

@@ -1,16 +1,14 @@
-# Dev-образ для линта и тестов
+# Только dev-контейнер для линта и тестов (без redis/gateway/salute/alice).
+name: rds-2p-assistants-skills-dev
+
 services:
-  rds-2p-salute-dev:
-    image: rds-2p-salute-dev
+  dev:
+    image: rds-2p-assistants-skills-dev
     build:
       context: .
       dockerfile: Dockerfile.dev
+    container_name: rds-2p-assistants-skills-dev
     user: "${RUNNER_UID:-0}:${RUNNER_GID:-0}"
     volumes:
       - .:/app
-    networks:
-      - robot-services-network
-
-networks:
-  robot-services-network:
-    external: true
+    working_dir: /app

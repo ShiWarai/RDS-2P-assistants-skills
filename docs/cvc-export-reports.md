@@ -1,6 +1,6 @@
 # Выгрузка репортов «исправить команду» (CVC)
 
-Инструкция для выгрузки записей обратной связи по командам из приложения RDS-2P-Salute.
+Инструкция для выгрузки записей обратной связи по командам из приложения RDS-2P-assistants-skills.
 
 ## Условия доступа
 
@@ -12,15 +12,15 @@
 | Параметр | Значение |
 |----------|----------|
 | Метод | `GET` |
-| URL (внутри Docker) | `http://rds-2p-salute-app:8000/v1/admin/command-feedback` |
+| URL (внутри Docker) | `http://rds-2p-assistants-skills-salute:8000/v1/admin/command-feedback` |
 | URL (с хоста, порт 20000) | `http://localhost:20000/v1/admin/command-feedback` |
 
-Сервис CVC и приложение должны находиться в одной Docker-сети `robot-services-network`. Тогда контейнер CVC обращается по имени хоста `rds-2p-salute-app` и порту `8000`.
+Сервис CVC и приложение должны находиться в одной Docker-сети `robot-services-network`. Тогда контейнер CVC обращается по имени хоста `rds-2p-assistants-skills-salute` и порту `8000`.
 
 ## Пример запроса (curl из контейнера CVC)
 
 ```bash
-curl -s http://rds-2p-salute-app:8000/v1/admin/command-feedback
+curl -s http://rds-2p-assistants-skills-salute:8000/v1/admin/command-feedback
 ```
 
 ## Пример ответа
@@ -56,7 +56,7 @@ curl -s http://rds-2p-salute-app:8000/v1/admin/command-feedback
 # Вызов из контейнера, подключённого к robot-services-network
 OUTPUT_DIR="${OUTPUT_DIR:-/app/export}"
 mkdir -p "$OUTPUT_DIR"
-curl -s "http://rds-2p-salute-app:8000/v1/admin/command-feedback" \
+curl -s "http://rds-2p-assistants-skills-salute:8000/v1/admin/command-feedback" \
   -o "$OUTPUT_DIR/command-feedback-$(date +%Y%m%d-%H%M%S).json"
 ```
 
