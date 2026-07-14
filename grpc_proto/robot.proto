@@ -7,6 +7,15 @@ service RobotCommandService {
   rpc StreamCommands(RobotConnectRequest) returns (stream StreamMessage);
 }
 
+// API для навыков (salute, alice, ...) — внутрикластерный мост к роботам
+service SkillBridgeService {
+  rpc SendCommand(SendCommandRequest) returns (SendCommandResponse);
+  rpc InitiateBinding(InitiateBindingRequest) returns (InitiateBindingResponse);
+  rpc NotifyBindingComplete(NotifyBindingCompleteRequest) returns (NotifyBindingCompleteResponse);
+  rpc IsRobotConnected(IsRobotConnectedRequest) returns (IsRobotConnectedResponse);
+  rpc ListConnectedRobots(ListConnectedRobotsRequest) returns (ListConnectedRobotsResponse);
+}
+
 // Запрос подключения от робота
 message RobotConnectRequest {
   string robot_id = 1;
@@ -24,15 +33,15 @@ message StreamMessage {
 
 // Код привязки
 message BindingCodeMessage {
-  string code = 1;           // 4-значный код
-  int64 expires_at = 2;      // Unix timestamp истечения
+  string code = 1;
+  int64 expires_at = 2;
 }
 
 // Команда для робота
 message Command {
-  string command_text = 1;   // Текст команды (например, "лапу", "бегать")
-  int64 timestamp = 2;       // Unix timestamp
-  string command_id = 3;     // Уникальный ID команды
+  string command_text = 1;
+  int64 timestamp = 2;
+  string command_id = 3;
 }
 
 // Сообщение об ошибке
@@ -43,6 +52,51 @@ message ErrorMessage {
 
 // Статус подключения
 message StatusMessage {
-  string status = 1;         // "connected", "binding_required", "binding_completed"
-  string message = 2;        // Дополнительное сообщение
+  string status = 1;
+  string message = 2;
+}
+
+message SendCommandRequest {
+  string robot_id = 1;
+  string command_text = 2;
+}
+
+message SendCommandResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message InitiateBindingRequest {
+  string robot_id = 1;
+}
+
+message InitiateBindingResponse {
+  bool success = 1;
+  string message = 2;
+  string code = 3;
+  int64 expires_at = 4;
+}
+
+message NotifyBindingCompleteRequest {
+  string robot_id = 1;
+  string user_id = 2;
+}
+
+message NotifyBindingCompleteResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message IsRobotConnectedRequest {
+  string robot_id = 1;
+}
+
+message IsRobotConnectedResponse {
+  bool connected = 1;
+}
+
+message ListConnectedRobotsRequest {}
+
+message ListConnectedRobotsResponse {
+  repeated string robot_ids = 1;
 }

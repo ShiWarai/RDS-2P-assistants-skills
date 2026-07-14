@@ -31,18 +31,46 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set image name
-        run: echo "IMAGE_BASE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/rds-2p-assistants-skills-app" >> $GITHUB_ENV
+      - name: Set image names
+        run: |
+          OWNER="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "IMAGE_GATEWAY=ghcr.io/${OWNER}/rds-2p-assistants-skills-robot-gateway" >> $GITHUB_ENV
+          echo "IMAGE_SALUTE=ghcr.io/${OWNER}/rds-2p-assistants-skills-salute" >> $GITHUB_ENV
+          echo "IMAGE_ALICE=ghcr.io/${OWNER}/rds-2p-assistants-skills-alice" >> $GITHUB_ENV
 
-      - name: Build and push
+      - name: Build and push robot-gateway
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./Dockerfile
+          file: ./Dockerfile.gateway
           platforms: linux/amd64,linux/arm64
           tags: |
-            ${{ env.IMAGE_BASE }}:main
-            ${{ env.IMAGE_BASE }}:${{ github.event.workflow_run.head_sha }}
+            ${{ env.IMAGE_GATEWAY }}:main
+            ${{ env.IMAGE_GATEWAY }}:${{ github.event.workflow_run.head_sha }}
+          push: true
+          provenance: false
+
+      - name: Build and push salute
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.salute
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ${{ env.IMAGE_SALUTE }}:main
+            ${{ env.IMAGE_SALUTE }}:${{ github.event.workflow_run.head_sha }}
+          push: true
+          provenance: false
+
+      - name: Build and push alice
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.alice
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ${{ env.IMAGE_ALICE }}:main
+            ${{ env.IMAGE_ALICE }}:${{ github.event.workflow_run.head_sha }}
           push: true
           provenance: false
 
@@ -61,8 +89,10 @@ jobs:
           format: markdown
           disable_notification: true
           message: |
-            *Образ успешно опубликован в GHCR*
+            *Образы успешно опубликованы в GHCR*
             Репозиторий: `${{ github.repository }}`
             Ветка: `${{ github.event.workflow_run.head_branch }}`
-            Образ: `ghcr.io/${{ github.repository_owner }}/rds-2p-assistants-skills-app:main`
+            Gateway: `ghcr.io/${{ github.repository_owner }}/rds-2p-assistants-skills-robot-gateway:main`
+            Salute: `ghcr.io/${{ github.repository_owner }}/rds-2p-assistants-skills-salute:main`
+            Alice: `ghcr.io/${{ github.repository_owner }}/rds-2p-assistants-skills-alice:main`
             [Открыть run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})

@@ -15,8 +15,8 @@ class Settings:
     CVC_SERVICE_URL: str = os.getenv("CVC_SERVICE_URL", "http://localhost:20001")
     CVC_TIMEOUT: float = 2.0
     
-    # gRPC
-    GRPC_PORT: int = int(os.getenv("GRPC_PORT", "50051"))
+    # Robot gateway (in-cluster gRPC)
+    ROBOT_GATEWAY_URL: str = os.getenv("ROBOT_GATEWAY_URL", "robot-gateway:50051")
     
     # Binding
     CODE_EXPIRY_SECONDS: int = 300  # 5 минут

@@ -10,8 +10,6 @@ jobs:
     name: Run tests in Docker
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      REDIS_PASSWORD: ci_redis_password
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -25,21 +23,6 @@ jobs:
         uses: docker/setup-buildx-action@v3
         with:
           driver: docker
-
-      - name: Create network for Docker Compose
-        run: |
-          docker network create robot-services-network 2>/dev/null || true
-
-      - name: Build app image
-        uses: docker/build-push-action@v6
-        env:
-          DOCKER_BUILD_RECORD_UPLOAD: false
-        with:
-          context: .
-          file: ./Dockerfile
-          tags: rds-2p-assistants-skills-app:latest
-          load: true
-          push: false
 
       - name: Build dev image
         uses: docker/build-push-action@v6
@@ -55,11 +38,11 @@ jobs:
       - name: Lint with ruff
         run: |
           set -e
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm -T rds-2p-assistants-skills-dev ruff check . --output-format=github
+          docker compose -f docker-compose.dev.yml run --rm -T dev ruff check . --output-format=github
 
       - name: Run tests in container
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm rds-2p-assistants-skills-dev pytest tests/ -v --tb=short --cov=app --cov-report=term-missing
+          docker compose -f docker-compose.dev.yml run --rm dev pytest tests/ -v --tb=short --cov=app --cov-report=term-missing
 
   notify-telegram-on-success:
     name: Notify Telegram on success

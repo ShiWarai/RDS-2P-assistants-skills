@@ -1,0 +1,1 @@
+"""Alice (Yandex Dialogs) adapter."""

@@ -30,25 +30,69 @@ services:
       timeout: 5s
       retries: 5
 
-  app:
-    image: rds-2p-assistants-skills-app
+  robot-gateway:
+    image: rds-2p-assistants-skills-robot-gateway
     build:
       context: .
-      dockerfile: Dockerfile
-    container_name: rds-2p-assistants-skills-app
+      dockerfile: Dockerfile.gateway
+    container_name: rds-2p-assistants-skills-robot-gateway
+    ports:
+      - "50051:50051"
+    restart: unless-stopped
+    networks:
+      - robot-services-network
+
+  salute:
+    image: rds-2p-assistants-skills-salute
+    build:
+      context: .
+      dockerfile: Dockerfile.salute
+    container_name: rds-2p-assistants-skills-salute
     ports:
       - "20000:8000"
-      - "50051:50051"
     volumes:
-      - app_logs:/app/logs
+      - salute_logs:/app/logs
     environment:
       - PYTHONUNBUFFERED=1
       - CVC_SERVICE_URL=http://cvc-api:20001
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - ROBOT_GATEWAY_URL=robot-gateway:50051
     restart: unless-stopped
     depends_on:
       redis:
         condition: service_healthy
+      robot-gateway:
+        condition: service_started
+    networks:
+      - robot-services-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  alice:
+    image: rds-2p-assistants-skills-alice
+    build:
+      context: .
+      dockerfile: Dockerfile.alice
+    container_name: rds-2p-assistants-skills-alice
+    ports:
+      - "20002:8000"
+    volumes:
+      - alice_logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+      - CVC_SERVICE_URL=http://cvc-api:20001
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - ROBOT_GATEWAY_URL=robot-gateway:50051
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      robot-gateway:
+        condition: service_started
     networks:
       - robot-services-network
     healthcheck:
@@ -60,7 +104,8 @@ services:
 
 volumes:
   redis_data:
-  app_logs:
+  salute_logs:
+  alice_logs:
 
 networks:
   robot-services-network:
