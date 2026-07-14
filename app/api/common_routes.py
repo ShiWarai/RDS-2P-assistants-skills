@@ -7,8 +7,6 @@ import logging
 from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse
 
-from app.infrastructure.config.settings import settings
-
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -45,14 +43,9 @@ def require_local_network(request: Request) -> None:
 
 
 def get_command_feedback_repository():
-    from app.infrastructure.persistence.redis_command_feedback_repository import (
-        RedisCommandFeedbackRepository,
-    )
+    from app.application.dependencies import create_command_feedback_repository
 
-    return RedisCommandFeedbackRepository(
-        settings.REDIS_URL,
-        last_command_ttl=settings.LAST_COMMAND_TTL_SECONDS,
-    )
+    return create_command_feedback_repository()
 
 
 @router.get("/v1/admin/command-feedback")

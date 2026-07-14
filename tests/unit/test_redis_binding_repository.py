@@ -26,8 +26,10 @@ def fake_redis():
 
 @pytest.fixture
 def redis_binding_repo(fake_redis):
-    with patch("app.infrastructure.persistence.redis_binding_repository.redis") as mock_redis:
-        mock_redis.from_url.return_value = fake_redis
+    with patch(
+        "app.infrastructure.persistence.redis_binding_repository.get_shared_redis_client"
+    ) as mock_get_client:
+        mock_get_client.return_value = fake_redis
         return RedisBindingRepository("redis://localhost:6379/0")
 
 

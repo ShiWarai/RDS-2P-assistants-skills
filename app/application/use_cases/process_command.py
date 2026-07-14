@@ -254,7 +254,7 @@ class ProcessCommandUseCase:
 
             function_name = detect_local_service_command(request.utterance)
             if not function_name:
-                classification_result = self._classify_command(request.utterance)
+                classification_result = await self._classify_command(request.utterance)
                 function_name = classification_result.get("function") if classification_result else None
             
             if function_name == "help" and "служебн" not in utterance_lower and "исполняем" not in utterance_lower:
@@ -343,10 +343,10 @@ class ProcessCommandUseCase:
         if local_function:
             classification_result = {"function": local_function}
         else:
-            classification_result = self._classify_command(request.utterance)
+            classification_result = await self._classify_command(request.utterance)
         
         if not classification_result:
-            if not self.command_classifier.is_available():
+            if not await self.command_classifier.is_available():
                 return "Извините, сервис классификации команд временно недоступен. Пожалуйста, попробуйте позже.", False
             return "Скажите 'помощь' для списка команд.", False
         
@@ -434,7 +434,7 @@ class ProcessCommandUseCase:
         else:
             return "Привяжите робота. Скажите 'привяжи робота 1' или 'привяжи панду 2'.", False
     
-    def _classify_command(self, utterance: str) -> Optional[dict]:
+    async def _classify_command(self, utterance: str) -> Optional[dict]:
         """
         Классифицирует команду через классификатор
         
@@ -443,12 +443,12 @@ class ProcessCommandUseCase:
         """
         utterance_lower = utterance.lower().strip()
         
-        if not self.command_classifier.is_available():
+        if not await self.command_classifier.is_available():
             logger.error(f"CVC сервис недоступен, невозможно классифицировать команду: '{utterance_lower}'")
             return None
         
         try:
-            result = self.command_classifier.classify(utterance_lower)
+            result = await self.command_classifier.classify(utterance_lower)
             if result and result.get("function"):
                 function = result.get("function")
                 confidence = result.get("confidence", 0.0)

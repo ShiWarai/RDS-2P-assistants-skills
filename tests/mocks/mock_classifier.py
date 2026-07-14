@@ -34,10 +34,7 @@ class MockClassifier(ICommandClassifier):
         self._available = available
         self._mapping = mapping or DEFAULT_MAPPING.copy()
 
-    def is_available(self) -> bool:
-        return self._available
-
-    def classify(self, utterance: str) -> Optional[Dict[str, Any]]:
+    async def classify(self, utterance: str) -> Optional[Dict[str, Any]]:
         if not self._available:
             return None
         u = utterance.lower().strip()
@@ -45,3 +42,6 @@ class MockClassifier(ICommandClassifier):
             if keyword in u:
                 return {"function": function, "confidence": 0.9}
         return None
+
+    async def is_available(self) -> bool:
+        return self._available

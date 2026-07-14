@@ -11,7 +11,7 @@ from app.domain.repositories.binding_repository import IBindingRepository
 from app.domain.value_objects.robot_id import RobotId
 from app.domain.value_objects.binding_code import BindingCode
 from app.domain.value_objects.user_state import UserState
-from app.utils.redis_url import redact_redis_url
+from app.infrastructure.persistence.redis_client import get_shared_redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -31,23 +31,23 @@ def _binding_key_to_user_id(key: str) -> str:
 class RedisBindingRepository(IBindingRepository):
     """Реализация репозитория привязок через Redis"""
     
-    def __init__(self, redis_url: Optional[str] = None):
+    def __init__(self, redis_url: Optional[str] = None, redis_client: Optional[redis.Redis] = None):
         """
         Инициализация репозитория
         
         Args:
             redis_url: URL подключения к Redis (по умолчанию из переменной окружения)
+            redis_client: Общий Redis-клиент (предпочтительно для production)
         """
+        if redis_client is not None:
+            self.redis_client = redis_client
+            return
+
         if redis_url is None:
             redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-        
+
         try:
-            self.redis_client = redis.from_url(redis_url, decode_responses=True)
-            self.redis_client.ping()
-            logger.info(
-                "RedisBindingRepository инициализирован (Redis: %s)",
-                redact_redis_url(redis_url),
-            )
+            self.redis_client = get_shared_redis_client(redis_url)
         except Exception as e:
             logger.error(f"Ошибка подключения к Redis: {e}")
             raise

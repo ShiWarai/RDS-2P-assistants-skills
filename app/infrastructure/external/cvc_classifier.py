@@ -1,9 +1,10 @@
 """
-Реализация ICommandClassifier через CVC API
+Реализация ICommandClassifier через CVC API (async httpx).
 """
 import logging
-import os
+import time
 from typing import Optional, Dict, Any
+
 import httpx
 
 from app.domain.services.command_classifier import ICommandClassifier
@@ -13,56 +14,84 @@ logger = logging.getLogger(__name__)
 
 class CVCCClassifier(ICommandClassifier):
     """Реализация классификатора команд через CVC API"""
-    
-    def __init__(self, base_url: Optional[str] = None, timeout: float = 2.0):
-        """
-        Инициализирует классификатор
-        
-        Args:
-            base_url: Базовый URL CVC API сервера
-            timeout: Таймаут запроса в секундах
-        """
-        if base_url is None:
-            base_url = os.getenv("CVC_SERVICE_URL", "http://localhost:20001")
-        self.base_url = base_url.rstrip('/')
+
+    def __init__(
+        self,
+        base_url: str,
+        timeout: float = 2.0,
+        health_cache_ttl: float = 30.0,
+    ):
+        self.base_url = base_url.rstrip("/")
         self.timeout = timeout
-        self._available = None  # Кэш для проверки доступности
-        logger.info(f"CVCCClassifier инициализирован с base_url={self.base_url}, timeout={timeout}")
-    
-    def classify(self, utterance: str) -> Optional[Dict[str, Any]]:
+        self.health_cache_ttl = health_cache_ttl
+        self._available: Optional[bool] = None
+        self._available_checked_at: float = 0.0
+        self._http_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(timeout),
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
+        logger.info(
+            "CVCCClassifier инициализирован с base_url=%s, timeout=%s, health_cache_ttl=%s",
+            self.base_url,
+            timeout,
+            health_cache_ttl,
+        )
+
+    async def aclose(self) -> None:
+        await self._http_client.aclose()
+
+    def _health_cache_valid(self) -> bool:
+        if self._available is None:
+            return False
+        return (time.monotonic() - self._available_checked_at) < self.health_cache_ttl
+
+    def _set_availability(self, available: bool) -> None:
+        if self._available is not None and self._available != available:
+            if available:
+                logger.info("CVC сервис снова доступен")
+            else:
+                logger.warning("CVC сервис недоступен")
+        elif self._available is None:
+            if available:
+                logger.info("CVC сервис доступен, будет использоваться для классификации команд")
+            else:
+                logger.warning("CVC сервис недоступен - система будет сообщать об ошибках подключения")
+        self._available = available
+        self._available_checked_at = time.monotonic()
+
+    async def _refresh_availability(self) -> bool:
+        try:
+            response = await self._http_client.get(f"{self.base_url}/v1/health")
+            self._set_availability(response.status_code == 200)
+        except Exception:
+            self._set_availability(False)
+        return bool(self._available)
+
+    async def classify(self, utterance: str) -> Optional[Dict[str, Any]]:
         """Классифицирует команду пользователя"""
         try:
-            with httpx.Client(timeout=self.timeout) as client:
-                response = client.post(
-                    f"{self.base_url}/v1/predict",
-                    json={"text": utterance, "return_confidence": True}
-                )
-                response.raise_for_status()
-                result = response.json()
-                
-                command = result.get("command")
-                if command:
-                    return {
-                        "function": command,
-                        "confidence": result.get("confidence")
-                    }
-                return None
-        except Exception as e:
-            logger.error(f"Ошибка классификации CVC для '{utterance}': {e}")
+            response = await self._http_client.post(
+                f"{self.base_url}/v1/predict",
+                json={"text": utterance, "return_confidence": True},
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            command = result.get("command")
+            if command:
+                self._set_availability(True)
+                return {
+                    "function": command,
+                    "confidence": result.get("confidence"),
+                }
             return None
-    
-    def is_available(self) -> bool:
-        """Проверяет доступность сервиса классификации"""
-        if self._available is None:
-            try:
-                with httpx.Client(timeout=self.timeout) as client:
-                    response = client.get(f"{self.base_url}/v1/health")
-                    self._available = response.status_code == 200
-                    if self._available:
-                        logger.info("CVC сервис доступен, будет использоваться для классификации команд")
-                    else:
-                        logger.warning("CVC сервис недоступен - система будет сообщать об ошибках подключения")
-            except Exception:
-                self._available = False
-                logger.warning("CVC сервис недоступен - система будет сообщать об ошибках подключения")
-        return self._available
+        except Exception as e:
+            self._set_availability(False)
+            logger.error("Ошибка классификации CVC для '%s': %s", utterance, e)
+            return None
+
+    async def is_available(self) -> bool:
+        """Проверяет доступность сервиса классификации (с TTL-кэшем)."""
+        if self._health_cache_valid():
+            return bool(self._available)
+        return await self._refresh_availability()
