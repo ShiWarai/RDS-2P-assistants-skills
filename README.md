@@ -1,6 +1,6 @@
 # RDS-2P-assistants-skills
 
-[![Tests](https://github.com/ShiWarai/RDS-2P-assistants-skills/actions/workflows/tests.yml/badge.svg)](https://github.com/ShiWarai/RDS-2P-assistants-skills/actions/workflows/tests.yml)
+[![Deploy](https://github.com/ShiWarai/RDS-2P-assistants-skills/actions/workflows/deploy.yml/badge.svg)](https://github.com/ShiWarai/RDS-2P-assistants-skills/actions/workflows/deploy.yml)
 [![License: MIT](https://img.shields.io/github/license/ShiWarai/RDS-2P-assistants-skills)](https://opensource.org/licenses/MIT)
 ![Python Version](https://img.shields.io/badge/python-3.10-blue)
 ![Docker Ready](https://img.shields.io/badge/docker-ready-blue?logo=docker)
@@ -227,10 +227,32 @@ docker compose -f docker-compose.dev.yml run --rm dev pytest tests/ -v --tb=shor
 
 | Workflow | Триггер | Назначение |
 | -------- | ------- | ---------- |
-| **Tests** (`tests.yml`) | Push в `main` или `dev` | Сборка **только dev-образа**, ruff + pytest (Salute + Alice) |
-| **Publish** (`publish.yml`) | Успешный Tests на `main` | Публикация трёх образов в GHCR |
+| **Deploy** (`deploy.yml`) | Push в `main` или `dev` | Dev-образ, ruff + pytest |
+| **Deploy → prerelease** (`deploy.yml`, job `publish-prerelease`) | Push в `dev` с `[prerelease]` в коммите, или ручной запуск с `publish_prerelease` | Публикация gateway/salute/alice с тегом `:prerelease` |
+| **Publish** (`publish.yml`) | Успешный Deploy на `main` | Публикация с тегом `:main` |
 
-### Публикация образов
+### Prerelease (тестовое окружение)
+
+По аналогии с `[retrain]` в [CVC](https://github.com/ShiWarai/CVC/blob/main/.github/workflows/deploy.yml): prod-образы публикуются **только по явному запросу**.
+
+1. **Автоматически:** commit в `dev` с меткой `[prerelease]` в сообщении, например:
+   ```bash
+   git commit -m "feat: alice webhook [prerelease]"
+   git push origin dev
+   ```
+   После успешных тестов в GHCR появятся теги `:prerelease` и `:<sha>`.
+
+2. **Вручную:** GitHub Actions → Deploy → Run workflow → включить `publish_prerelease`.
+
+На тестовом стенде:
+```bash
+docker pull ghcr.io/shiwarai/rds-2p-assistants-skills-robot-gateway:prerelease
+docker pull ghcr.io/shiwarai/rds-2p-assistants-skills-salute:prerelease
+docker pull ghcr.io/shiwarai/rds-2p-assistants-skills-alice:prerelease
+docker compose -f docker-compose.yml -f docker-compose.prerelease.yml up -d
+```
+
+### Публикация stable (main)
 
 - `ghcr.io/shiwarai/rds-2p-assistants-skills-robot-gateway:main`
 - `ghcr.io/shiwarai/rds-2p-assistants-skills-salute:main`
