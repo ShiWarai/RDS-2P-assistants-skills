@@ -1,9 +1,9 @@
-name: rds-2p-salute
+name: rds-2p-assistants-skills
 
 services:
   redis:
     image: redis:7-alpine
-    container_name: rds-2p-salute-redis
+    container_name: rds-2p-assistants-skills-redis
     command:
       - redis-server
       - --appendonly
@@ -31,11 +31,11 @@ services:
       retries: 5
 
   app:
-    image: rds-2p-salute-app
+    image: rds-2p-assistants-skills-app
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: rds-2p-salute-app
+    container_name: rds-2p-assistants-skills-app
     ports:
       - "20000:8000"
       - "50051:50051"

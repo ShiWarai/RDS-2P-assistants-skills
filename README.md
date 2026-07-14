@@ -1,7 +1,7 @@
-# RDS-2P-Salute
+# RDS-2P-assistants-skills
 
-[![Tests](https://github.com/ShiWarai/RDS-2P-Salute/actions/workflows/tests.yml/badge.svg)](https://github.com/ShiWarai/RDS-2P-Salute/actions/workflows/tests.yml)
-[![License: MIT](https://img.shields.io/github/license/ShiWarai/RDS-2P-Salute)](https://opensource.org/licenses/MIT)
+[![Tests](https://github.com/ShiWarai/RDS-2P-assistants-skills/actions/workflows/tests.yml/badge.svg)](https://github.com/ShiWarai/RDS-2P-assistants-skills/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/github/license/ShiWarai/RDS-2P-assistants-skills)](https://opensource.org/licenses/MIT)
 ![Python Version](https://img.shields.io/badge/python-3.10-blue)
 ![Docker Ready](https://img.shields.io/badge/docker-ready-blue?logo=docker)
 
@@ -57,7 +57,7 @@
 ### Docker (рекомендуется)
 
 - **Локальная разработка / сборка:** `docker compose up -d`. Сервисы: приложение (порты 20000, 50051), Redis.
-- **Продакшен (образ из GHCR):** `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`. Переопределяет только сервис `app` (образ из registry, без сборки). Предварительно: `docker pull ghcr.io/shiwarai/rds-2p-salute-app:main`.
+- **Продакшен (образ из GHCR):** `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`. Переопределяет только сервис `app` (образ из registry, без сборки). Предварительно: `docker pull ghcr.io/shiwarai/rds-2p-assistants-skills-app:main`.
 
 ### Тестирование без реального робота
 
@@ -67,7 +67,7 @@
 
 Привязки хранятся в Redis в томе **redis_data**.
 
-- В `docker-compose.yml` задано **`name: rds-2p-salute`**, поэтому том один и тот же с любого пути запуска.
+- В `docker-compose.yml` задано **`name: rds-2p-assistants-skills`**, поэтому том один и тот же с любого пути запуска.
 - Redis пишет AOF в **`--dir /data`** (смонтированный том).
 - Команда **`docker compose down -v`** удаляет тома — после следующего `up` Redis будет пустой. Для обычного перезапуска: `docker compose down && docker compose up --build -d`.
 
@@ -168,7 +168,7 @@ graph TD
 ## Структура проекта
 
 ```
-RDS-2P-Salute/
+RDS-2P-assistants-skills/
 ├── app/
 │   ├── api/                # Роуты FastAPI
 │   ├── application/        # Use Cases, DTO
@@ -193,18 +193,18 @@ RDS-2P-Salute/
 
 ## Тестирование
 
-Используется образ **rds-2p-salute-dev** (docker-compose.dev.yml):
+Используется образ **rds-2p-assistants-skills-dev** (docker-compose.dev.yml):
 
 ```bash
 docker network create robot-services-network 2>/dev/null || true
 docker compose -f docker-compose.yml build app
-docker compose -f docker-compose.yml -f docker-compose.dev.yml build rds-2p-salute-dev
+docker compose -f docker-compose.yml -f docker-compose.dev.yml build rds-2p-assistants-skills-dev
 
 # Линт
-docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm -T rds-2p-salute-dev ruff check .
+docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm -T rds-2p-assistants-skills-dev ruff check .
 
 # Unit- и интеграционные тесты
-docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm -T rds-2p-salute-dev pytest tests/ -v --tb=short --cov=app --cov-report=term-missing
+docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm -T rds-2p-assistants-skills-dev pytest tests/ -v --tb=short --cov=app --cov-report=term-missing
 ```
 
 Тесты используют моки и fakeredis, без реального CVC и Redis.
@@ -222,9 +222,9 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm -T rds-2
 
 ### Публикация образа
 
-- Образ: `ghcr.io/shiwarai/rds-2p-salute-app:main` и по SHA коммита.
+- Образ: `ghcr.io/shiwarai/rds-2p-assistants-skills-app:main` и по SHA коммита.
 - Собирается для **linux/amd64** и **linux/arm64** (например, для Orange Pi 5).
-- На сервере: `docker pull ghcr.io/shiwarai/rds-2p-salute-app:main`. После первого push в репозитории: **Packages** → `rds-2p-salute-app` → **Package settings** → **Change visibility** → **Public** (если нужен публичный доступ без логина).
+- На сервере: `docker pull ghcr.io/shiwarai/rds-2p-assistants-skills-app:main`. После первого push в репозитории: **Packages** → `rds-2p-assistants-skills-app` → **Package settings** → **Change visibility** → **Public** (если нужен публичный доступ без логина).
 - Уведомление в Telegram при успешной публикации (секреты `TELEGRAM_TOKEN`, `TELEGRAM_TO`).
 
 ---

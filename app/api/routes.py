@@ -327,7 +327,7 @@ async def export_command_feedback(
     Выгрузка записей обратной связи по командам («исправить команду»).
 
     Доступ только из локальной сети (частные IP). В Docker — из сети robot-services-network:
-    http://rds-2p-salute-app:8000/v1/admin/command-feedback
+    http://rds-2p-assistants-skills-app:8000/v1/admin/command-feedback
     """
     try:
         items = repo.get_all_feedback()

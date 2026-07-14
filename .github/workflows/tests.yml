@@ -37,7 +37,7 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          tags: rds-2p-salute-app:latest
+          tags: rds-2p-assistants-skills-app:latest
           load: true
           push: false
 
@@ -48,18 +48,18 @@ jobs:
         with:
           context: .
           file: ./Dockerfile.dev
-          tags: rds-2p-salute-dev:latest
+          tags: rds-2p-assistants-skills-dev:latest
           load: true
           push: false
 
       - name: Lint with ruff
         run: |
           set -e
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm -T rds-2p-salute-dev ruff check . --output-format=github
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm -T rds-2p-assistants-skills-dev ruff check . --output-format=github
 
       - name: Run tests in container
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm rds-2p-salute-dev pytest tests/ -v --tb=short --cov=app --cov-report=term-missing
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm rds-2p-assistants-skills-dev pytest tests/ -v --tb=short --cov=app --cov-report=term-missing
 
   notify-telegram-on-success:
     name: Notify Telegram on success

@@ -1,7 +1,7 @@
 # Dev-образ для линта и тестов
 services:
-  rds-2p-salute-dev:
-    image: rds-2p-salute-dev
+  rds-2p-assistants-skills-dev:
+    image: rds-2p-assistants-skills-dev
     build:
       context: .
       dockerfile: Dockerfile.dev
