@@ -215,26 +215,17 @@ class ProcessCommandUseCase:
         utterance_lower = request.utterance.lower().strip()
 
         if has_help_state:
-            if "служеб" in utterance_lower:
-                text = self.get_help_uc.get_service_commands_help()
-                if request.user_id:
-                    self.user_repository.remove_user_state(request.user_id, UserState.WAITING_HELP_SECTION)
-                return text, False
-            elif "исполняем" in utterance_lower:
-                text = self.get_help_uc.get_robot_commands_help(request.user_id)
-                if request.user_id:
-                    self.user_repository.remove_user_state(request.user_id, UserState.WAITING_HELP_SECTION)
-                return text, False
-            else:
-                # Не выбор раздела - обрабатываем через handle_binding_flow
-                binding_text, binding_finished = await self.handle_binding_flow_uc.process(
-                    request.user_id, request.utterance, request.message
-                )
-                if binding_text is not None:
-                    # Возвращаем как есть (может быть список или строка)
-                    return binding_text, binding_finished
-                else:
-                    return "Введите код привязки или скажите 'отмена'.", False
+            help_section_response = self._handle_help_section_choice(request, utterance_lower)
+            if help_section_response is not None:
+                return help_section_response
+            # Не выбор раздела - обрабатываем через handle_binding_flow
+            binding_text, binding_finished = await self.handle_binding_flow_uc.process(
+                request.user_id, request.utterance, request.message
+            )
+            if binding_text is not None:
+                # Возвращаем как есть (может быть список или строка)
+                return binding_text, binding_finished
+            return "Введите код привязки или скажите 'отмена'.", False
         
         elif has_command_detail_state:
             # Обработка выбора команды для описания
@@ -282,6 +273,24 @@ class ProcessCommandUseCase:
                 else:
                     return "Введите код привязки или скажите 'отмена'.", False
     
+    def _handle_help_section_choice(
+        self, request: CommandRequestDTO, utterance_lower: str
+    ) -> Optional[tuple[Union[str, List[str]], bool]]:
+        from app.utils.request_parser import detect_help_section_choice
+
+        section = detect_help_section_choice(utterance_lower)
+        if section == "service":
+            text = self.get_help_uc.get_service_commands_help()
+            if request.user_id:
+                self.user_repository.remove_user_state(request.user_id, UserState.WAITING_HELP_SECTION)
+            return text, False
+        if section == "executable":
+            text = self.get_help_uc.get_robot_commands_help(request.user_id)
+            if request.user_id:
+                self.user_repository.remove_user_state(request.user_id, UserState.WAITING_HELP_SECTION)
+            return text, False
+        return None
+
     async def _handle_normal_mode(
         self,
         request: CommandRequestDTO,
@@ -294,23 +303,16 @@ class ProcessCommandUseCase:
         # Проверяем команду отмены вне режима привязки
         if any(word in utterance_lower for word in ["отмена", "отменить", "отменить привязку"]):
             return "Нет активной операции для отмены.", False
+
+        help_section_response = self._handle_help_section_choice(request, utterance_lower)
+        if help_section_response is not None:
+            return help_section_response
         
         if has_help_state:
-            if "служеб" in utterance_lower:
-                text = self.get_help_uc.get_service_commands_help()
-                if request.user_id:
-                    self.user_repository.remove_user_state(request.user_id, UserState.WAITING_HELP_SECTION)
-                return text, False
-            elif "исполняем" in utterance_lower:
-                text = self.get_help_uc.get_robot_commands_help(request.user_id)
-                if request.user_id:
-                    self.user_repository.remove_user_state(request.user_id, UserState.WAITING_HELP_SECTION)
-                return text, False
-            else:
-                # Не выбор раздела - очищаем состояние и обрабатываем как обычную команду
-                if request.user_id:
-                    self.user_repository.remove_user_state(request.user_id, UserState.WAITING_HELP_SECTION)
-                has_help_state = False
+            # Не выбор раздела — очищаем состояние и обрабатываем как обычную команду
+            if request.user_id:
+                self.user_repository.remove_user_state(request.user_id, UserState.WAITING_HELP_SECTION)
+            has_help_state = False
         
         elif has_command_detail_state:
             # Обработка выбора команды для описания

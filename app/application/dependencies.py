@@ -2,6 +2,7 @@
 Фабрика зависимостей для навыков (salute, alice).
 """
 import logging
+from functools import lru_cache
 
 from app.infrastructure.persistence.redis_user_repository import RedisUserRepository
 from app.infrastructure.persistence.redis_binding_repository import RedisBindingRepository
@@ -18,8 +19,9 @@ from app.infrastructure.config.settings import settings
 logger = logging.getLogger(__name__)
 
 
+@lru_cache
 def create_process_command_use_case() -> ProcessCommandUseCase:
-    """Создаёт ProcessCommandUseCase с Redis, CVC и remote robot gateway."""
+    """Создаёт ProcessCommandUseCase с Redis, CVC и remote robot gateway (singleton)."""
     user_repository = RedisUserRepository(settings.REDIS_URL)
     binding_repository = RedisBindingRepository(settings.REDIS_URL)
     command_feedback_repository = RedisCommandFeedbackRepository(

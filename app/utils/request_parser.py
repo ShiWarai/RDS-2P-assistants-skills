@@ -149,6 +149,19 @@ def detect_local_service_command(utterance: str) -> Optional[str]:
     return None
 
 
+def detect_help_section_choice(utterance: str) -> Optional[str]:
+    """
+    Выбор раздела помощи без CVC: «служебные» / «исполняемые».
+    Учитывает варианты ASR вроде «служебная».
+    """
+    utterance_lower = utterance.lower().strip()
+    if "служеб" in utterance_lower:
+        return "service"
+    if "исполняем" in utterance_lower:
+        return "executable"
+    return None
+
+
 def extract_robot_id_from_bind_command(utterance: str) -> Optional[str]:
     """
     Извлекает ID робота из команды привязки.

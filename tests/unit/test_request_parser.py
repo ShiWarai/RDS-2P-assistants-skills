@@ -4,6 +4,7 @@ Unit-тесты для request_parser.
 import pytest
 
 from app.utils.request_parser import (
+    detect_help_section_choice,
     detect_local_service_command,
     extract_robot_id_from_bind_command,
     extract_user_id,
@@ -71,3 +72,11 @@ def test_detect_local_service_command():
     assert detect_local_service_command("исправить команду") == "report_command"
     assert detect_local_service_command("лапу") is None
     assert detect_local_service_command("служебные команды") is None
+
+
+def test_detect_help_section_choice():
+    """detect_help_section_choice — разделы меню помощи без CVC."""
+    assert detect_help_section_choice("служебные") == "service"
+    assert detect_help_section_choice("служебная") == "service"
+    assert detect_help_section_choice("исполняемые") == "executable"
+    assert detect_help_section_choice("лапу") is None
