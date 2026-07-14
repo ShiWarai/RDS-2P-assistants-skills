@@ -258,9 +258,13 @@ class ProcessCommandUseCase:
                     return "Введите код привязки или скажите 'отмена'.", False
         
         else:
-            # Проверяем, не запросил ли пользователь помощь (через классификатор)
-            classification_result = self._classify_command(request.utterance)
-            function_name = classification_result.get("function") if classification_result else None
+            # Проверяем, не запросил ли пользователь помощь (локально или через CVC)
+            from app.utils.request_parser import detect_local_service_command
+
+            function_name = detect_local_service_command(request.utterance)
+            if not function_name:
+                classification_result = self._classify_command(request.utterance)
+                function_name = classification_result.get("function") if classification_result else None
             
             if function_name == "help" and "служебн" not in utterance_lower and "исполняем" not in utterance_lower:
                 # Пользователь запросил помощь в режиме привязки
@@ -330,8 +334,14 @@ class ProcessCommandUseCase:
     
     async def _process_normal_command(self, request: CommandRequestDTO) -> tuple[str, bool]:
         """Обрабатывает обычную команду (не привязка, не помощь)"""
-        # Классифицируем команду
-        classification_result = self._classify_command(request.utterance)
+        from app.utils.request_parser import detect_local_service_command
+
+        # Служебные команды распознаём локально — CVC нужен только для команд роботу
+        local_function = detect_local_service_command(request.utterance)
+        if local_function:
+            classification_result = {"function": local_function}
+        else:
+            classification_result = self._classify_command(request.utterance)
         
         if not classification_result:
             if not self.command_classifier.is_available():

@@ -4,6 +4,7 @@ Unit-тесты для request_parser.
 import pytest
 
 from app.utils.request_parser import (
+    detect_local_service_command,
     extract_robot_id_from_bind_command,
     extract_user_id,
     extract_code_from_utterance,
@@ -59,3 +60,14 @@ def test_is_unbind_command():
     assert is_unbind_command("отключи робота") is True
     assert is_unbind_command("привяжи робота 0") is False
     assert is_unbind_command("лапу") is False
+
+
+def test_detect_local_service_command():
+    """detect_local_service_command — служебные команды без CVC."""
+    assert detect_local_service_command("привяжи робота 1") == "bind"
+    assert detect_local_service_command("отвяжи робота") == "unbind"
+    assert detect_local_service_command("помощь") == "help"
+    assert detect_local_service_command("молчи") == "silence"
+    assert detect_local_service_command("исправить команду") == "report_command"
+    assert detect_local_service_command("лапу") is None
+    assert detect_local_service_command("служебные команды") is None
