@@ -33,4 +33,5 @@ EXPOSE 8000
 EXPOSE 50051
 
 # Команда запуска
-CMD ["uvicorn", "app.main_salute:app", "--host", "0.0.0.0", "--port", "8000"]
+ENV UVICORN_WORKERS=2
+CMD ["sh", "-c", "uvicorn app.main_salute:app --host 0.0.0.0 --port 8000 --workers ${UVICORN_WORKERS}"]

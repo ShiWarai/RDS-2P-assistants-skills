@@ -42,6 +42,22 @@ def test_alice_webhook_help_returns_menu(alice_client):
     assert "служебн" in text.lower() or "раздел" in text.lower()
 
 
+def test_alice_webhook_help_then_service_commands(alice_client):
+    user = "alice-help-flow"
+    alice_client.post("/v1/webhook", json=_alice_payload("помощь", user_id=user))
+    resp = alice_client.post("/v1/webhook", json=_alice_payload("служебные", user_id=user))
+    assert resp.status_code == 200
+    text = _alice_text(resp.json())
+    assert "привяжи" in text.lower() or "служебн" in text.lower()
+
+
+def test_alice_webhook_service_section_without_help_state(alice_client):
+    resp = alice_client.post("/v1/webhook", json=_alice_payload("служебная"))
+    assert resp.status_code == 200
+    text = _alice_text(resp.json())
+    assert "привяжи" in text.lower() or "молчи" in text.lower()
+
+
 def test_alice_webhook_command_without_binding(alice_client):
     payload = _alice_payload("лапу")
     resp = alice_client.post("/v1/webhook", json=payload)

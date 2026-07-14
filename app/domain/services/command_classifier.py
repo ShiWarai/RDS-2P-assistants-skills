@@ -9,7 +9,7 @@ class ICommandClassifier(ABC):
     """Интерфейс для классификации команд пользователя"""
     
     @abstractmethod
-    def classify(self, utterance: str) -> Optional[Dict[str, Any]]:
+    async def classify(self, utterance: str) -> Optional[Dict[str, Any]]:
         """
         Классифицирует команду пользователя
         
@@ -25,7 +25,7 @@ class ICommandClassifier(ABC):
         pass
     
     @abstractmethod
-    def is_available(self) -> bool:
+    async def is_available(self) -> bool:
         """
         Проверяет доступность сервиса классификации
         

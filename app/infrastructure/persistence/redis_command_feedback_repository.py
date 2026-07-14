@@ -9,7 +9,7 @@ from typing import Optional
 import redis
 
 from app.domain.repositories.command_feedback_repository import ICommandFeedbackRepository
-from app.utils.redis_url import redact_redis_url
+from app.infrastructure.persistence.redis_client import get_shared_redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -20,23 +20,28 @@ FEEDBACK_LIST_KEY = "command_feedback:list"
 class RedisCommandFeedbackRepository(ICommandFeedbackRepository):
     """Реализация репозитория обратной связи по командам через Redis"""
 
-    def __init__(self, redis_url: Optional[str] = None, last_command_ttl: int = 300):
+    def __init__(
+        self,
+        redis_url: Optional[str] = None,
+        last_command_ttl: int = 300,
+        redis_client: Optional[redis.Redis] = None,
+    ):
         """
         Args:
             redis_url: URL подключения к Redis
             last_command_ttl: TTL для ключа последней команды в секундах
+            redis_client: Общий Redis-клиент (предпочтительно для production)
         """
+        self._last_command_ttl = last_command_ttl
+        if redis_client is not None:
+            self.redis_client = redis_client
+            return
+
         if redis_url is None:
             redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
         self._redis_url = redis_url
-        self._last_command_ttl = last_command_ttl
         try:
-            self.redis_client = redis.from_url(redis_url, decode_responses=True)
-            self.redis_client.ping()
-            logger.info(
-                "RedisCommandFeedbackRepository инициализирован (Redis: %s)",
-                redact_redis_url(redis_url),
-            )
+            self.redis_client = get_shared_redis_client(redis_url)
         except Exception as e:
             logger.error("Ошибка подключения к Redis: %s", e)
             raise

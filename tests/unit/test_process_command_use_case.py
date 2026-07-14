@@ -59,6 +59,56 @@ async def test_cvc_unavailable_returns_message(
 
 
 @pytest.mark.asyncio
+async def test_bind_works_when_cvc_unavailable(
+    mock_binding_repo,
+    mock_user_repo,
+    mock_robot_connector,
+    mock_command_feedback_repo,
+):
+    """Привязка работает без CVC — распознаётся локально по шаблону."""
+    from app.application.use_cases.process_command import ProcessCommandUseCase
+    from app.application.use_cases.bind_robot import BindRobotUseCase
+    from app.application.use_cases.unbind_robot import UnbindRobotUseCase
+    from app.application.use_cases.get_help import GetHelpUseCase
+    from app.application.use_cases.handle_binding_flow import HandleBindingFlowUseCase
+    from tests.mocks.mock_classifier import MockClassifier
+
+    classifier = MockClassifier(available=False)
+    bind_robot_uc = BindRobotUseCase(
+        mock_binding_repo, mock_user_repo, mock_robot_connector
+    )
+    unbind_robot_uc = UnbindRobotUseCase(mock_binding_repo)
+    get_help_uc = GetHelpUseCase(mock_user_repo)
+    handle_binding_flow_uc = HandleBindingFlowUseCase(
+        mock_binding_repo, mock_user_repo, bind_robot_uc
+    )
+    uc = ProcessCommandUseCase(
+        user_repository=mock_user_repo,
+        binding_repository=mock_binding_repo,
+        command_classifier=classifier,
+        robot_connector=mock_robot_connector,
+        bind_robot_uc=bind_robot_uc,
+        unbind_robot_uc=unbind_robot_uc,
+        get_help_uc=get_help_uc,
+        handle_binding_flow_uc=handle_binding_flow_uc,
+        command_feedback_repository=mock_command_feedback_repo,
+    )
+
+    req = CommandRequestDTO(
+        user_id="user1",
+        utterance="привяжи робота 1",
+        is_new_session=False,
+        intent="",
+        data={},
+        message=None,
+        platform=Platform.SALUTE_LEGACY,
+    )
+    resp = await uc.execute(req)
+    assert "недоступен" not in resp.text.lower()
+    assert "робот" in resp.text.lower()
+
+
+@pytest.mark.asyncio
 async def test_help_returns_menu(process_command_use_case):
     """При «help» — возвращается меню помощи."""
     req = CommandRequestDTO(

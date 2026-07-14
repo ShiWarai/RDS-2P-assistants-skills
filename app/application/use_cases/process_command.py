@@ -215,26 +215,17 @@ class ProcessCommandUseCase:
         utterance_lower = request.utterance.lower().strip()
 
         if has_help_state:
-            if "служеб" in utterance_lower:
-                text = self.get_help_uc.get_service_commands_help()
-                if request.user_id:
-                    self.user_repository.remove_user_state(request.user_id, UserState.WAITING_HELP_SECTION)
-                return text, False
-            elif "исполняем" in utterance_lower:
-                text = self.get_help_uc.get_robot_commands_help(request.user_id)
-                if request.user_id:
-                    self.user_repository.remove_user_state(request.user_id, UserState.WAITING_HELP_SECTION)
-                return text, False
-            else:
-                # Не выбор раздела - обрабатываем через handle_binding_flow
-                binding_text, binding_finished = await self.handle_binding_flow_uc.process(
-                    request.user_id, request.utterance, request.message
-                )
-                if binding_text is not None:
-                    # Возвращаем как есть (может быть список или строка)
-                    return binding_text, binding_finished
-                else:
-                    return "Введите код привязки или скажите 'отмена'.", False
+            help_section_response = self._handle_help_section_choice(request, utterance_lower)
+            if help_section_response is not None:
+                return help_section_response
+            # Не выбор раздела - обрабатываем через handle_binding_flow
+            binding_text, binding_finished = await self.handle_binding_flow_uc.process(
+                request.user_id, request.utterance, request.message
+            )
+            if binding_text is not None:
+                # Возвращаем как есть (может быть список или строка)
+                return binding_text, binding_finished
+            return "Введите код привязки или скажите 'отмена'.", False
         
         elif has_command_detail_state:
             # Обработка выбора команды для описания
@@ -258,9 +249,13 @@ class ProcessCommandUseCase:
                     return "Введите код привязки или скажите 'отмена'.", False
         
         else:
-            # Проверяем, не запросил ли пользователь помощь (через классификатор)
-            classification_result = self._classify_command(request.utterance)
-            function_name = classification_result.get("function") if classification_result else None
+            # Проверяем, не запросил ли пользователь помощь (локально или через CVC)
+            from app.utils.request_parser import detect_local_service_command
+
+            function_name = detect_local_service_command(request.utterance)
+            if not function_name:
+                classification_result = await self._classify_command(request.utterance)
+                function_name = classification_result.get("function") if classification_result else None
             
             if function_name == "help" and "служебн" not in utterance_lower and "исполняем" not in utterance_lower:
                 # Пользователь запросил помощь в режиме привязки
@@ -278,6 +273,24 @@ class ProcessCommandUseCase:
                 else:
                     return "Введите код привязки или скажите 'отмена'.", False
     
+    def _handle_help_section_choice(
+        self, request: CommandRequestDTO, utterance_lower: str
+    ) -> Optional[tuple[Union[str, List[str]], bool]]:
+        from app.utils.request_parser import detect_help_section_choice
+
+        section = detect_help_section_choice(utterance_lower)
+        if section == "service":
+            text = self.get_help_uc.get_service_commands_help()
+            if request.user_id:
+                self.user_repository.remove_user_state(request.user_id, UserState.WAITING_HELP_SECTION)
+            return text, False
+        if section == "executable":
+            text = self.get_help_uc.get_robot_commands_help(request.user_id)
+            if request.user_id:
+                self.user_repository.remove_user_state(request.user_id, UserState.WAITING_HELP_SECTION)
+            return text, False
+        return None
+
     async def _handle_normal_mode(
         self,
         request: CommandRequestDTO,
@@ -290,23 +303,16 @@ class ProcessCommandUseCase:
         # Проверяем команду отмены вне режима привязки
         if any(word in utterance_lower for word in ["отмена", "отменить", "отменить привязку"]):
             return "Нет активной операции для отмены.", False
+
+        help_section_response = self._handle_help_section_choice(request, utterance_lower)
+        if help_section_response is not None:
+            return help_section_response
         
         if has_help_state:
-            if "служеб" in utterance_lower:
-                text = self.get_help_uc.get_service_commands_help()
-                if request.user_id:
-                    self.user_repository.remove_user_state(request.user_id, UserState.WAITING_HELP_SECTION)
-                return text, False
-            elif "исполняем" in utterance_lower:
-                text = self.get_help_uc.get_robot_commands_help(request.user_id)
-                if request.user_id:
-                    self.user_repository.remove_user_state(request.user_id, UserState.WAITING_HELP_SECTION)
-                return text, False
-            else:
-                # Не выбор раздела - очищаем состояние и обрабатываем как обычную команду
-                if request.user_id:
-                    self.user_repository.remove_user_state(request.user_id, UserState.WAITING_HELP_SECTION)
-                has_help_state = False
+            # Не выбор раздела — очищаем состояние и обрабатываем как обычную команду
+            if request.user_id:
+                self.user_repository.remove_user_state(request.user_id, UserState.WAITING_HELP_SECTION)
+            has_help_state = False
         
         elif has_command_detail_state:
             # Обработка выбора команды для описания
@@ -330,11 +336,17 @@ class ProcessCommandUseCase:
     
     async def _process_normal_command(self, request: CommandRequestDTO) -> tuple[str, bool]:
         """Обрабатывает обычную команду (не привязка, не помощь)"""
-        # Классифицируем команду
-        classification_result = self._classify_command(request.utterance)
+        from app.utils.request_parser import detect_local_service_command
+
+        # Служебные команды распознаём локально — CVC нужен только для команд роботу
+        local_function = detect_local_service_command(request.utterance)
+        if local_function:
+            classification_result = {"function": local_function}
+        else:
+            classification_result = await self._classify_command(request.utterance)
         
         if not classification_result:
-            if not self.command_classifier.is_available():
+            if not await self.command_classifier.is_available():
                 return "Извините, сервис классификации команд временно недоступен. Пожалуйста, попробуйте позже.", False
             return "Скажите 'помощь' для списка команд.", False
         
@@ -422,7 +434,7 @@ class ProcessCommandUseCase:
         else:
             return "Привяжите робота. Скажите 'привяжи робота 1' или 'привяжи панду 2'.", False
     
-    def _classify_command(self, utterance: str) -> Optional[dict]:
+    async def _classify_command(self, utterance: str) -> Optional[dict]:
         """
         Классифицирует команду через классификатор
         
@@ -431,12 +443,12 @@ class ProcessCommandUseCase:
         """
         utterance_lower = utterance.lower().strip()
         
-        if not self.command_classifier.is_available():
+        if not await self.command_classifier.is_available():
             logger.error(f"CVC сервис недоступен, невозможно классифицировать команду: '{utterance_lower}'")
             return None
         
         try:
-            result = self.command_classifier.classify(utterance_lower)
+            result = await self.command_classifier.classify(utterance_lower)
             if result and result.get("function"):
                 function = result.get("function")
                 confidence = result.get("confidence", 0.0)

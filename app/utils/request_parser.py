@@ -125,6 +125,43 @@ def is_unbind_command(utterance: str) -> bool:
     return False
 
 
+def detect_local_service_command(utterance: str) -> Optional[str]:
+    """
+    Распознаёт служебные команды без CVC (привязка, помощь, молчи и т.д.).
+    """
+    utterance_lower = utterance.lower().strip()
+
+    if is_bind_command(utterance_lower):
+        return "bind"
+    if is_unbind_command(utterance_lower):
+        return "unbind"
+
+    if "служебн" not in utterance_lower and "исполняем" not in utterance_lower:
+        if utterance_lower in ("помощь", "помоги", "справка") or utterance_lower.startswith("помощ"):
+            return "help"
+
+    if any(word in utterance_lower for word in ("молчи", "помолчи", "замолчи", "тише")):
+        return "silence"
+
+    if "исправить команд" in utterance_lower:
+        return "report_command"
+
+    return None
+
+
+def detect_help_section_choice(utterance: str) -> Optional[str]:
+    """
+    Выбор раздела помощи без CVC: «служебные» / «исполняемые».
+    Учитывает варианты ASR вроде «служебная».
+    """
+    utterance_lower = utterance.lower().strip()
+    if "служеб" in utterance_lower:
+        return "service"
+    if "исполняем" in utterance_lower:
+        return "executable"
+    return None
+
+
 def extract_robot_id_from_bind_command(utterance: str) -> Optional[str]:
     """
     Извлекает ID робота из команды привязки.

@@ -9,6 +9,7 @@ from fastapi import FastAPI
 
 from app.api.common_routes import router as common_router
 from app.platforms.alice.routes import router as alice_router
+from app.infrastructure.lifespan import skill_app_lifespan
 
 log_dir = Path(__file__).parent.parent / "logs"
 log_dir.mkdir(exist_ok=True)
@@ -23,7 +24,7 @@ console_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(level
 
 logging.basicConfig(level=logging.DEBUG, handlers=[file_handler, console_handler])
 
-app = FastAPI(title="Robot Panda Alice API", version="1.0.0")
+app = FastAPI(title="Robot Panda Alice API", version="1.0.0", lifespan=skill_app_lifespan)
 app.include_router(common_router)
 app.include_router(alice_router)
 
