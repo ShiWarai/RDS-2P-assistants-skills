@@ -1,6 +1,9 @@
 """
 Сборка ответов для навыка Алисы.
 https://yandex.ru/dev/dialogs/alice/doc/ru/response
+
+У API Алисы нет auto_listening: «молчи» не выключает микрофон как в Salute.
+end_session=true — полный выход из навыка, не пауза.
 """
 from typing import Dict, Any, List, Union
 

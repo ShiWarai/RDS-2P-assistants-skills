@@ -2,9 +2,10 @@
 Use Case для получения справки
 """
 import logging
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from app.domain.value_objects.user_state import UserState
+from app.domain.value_objects.platform import Platform
 from app.domain.repositories.user_repository import IUserRepository
 
 logger = logging.getLogger(__name__)
@@ -84,14 +85,22 @@ class GetHelpUseCase:
         """Возвращает меню выбора раздела помощи"""
         return "Выберите раздел: 'служебные' или 'исполняемые'."
     
-    def get_service_commands_help(self) -> str:
+    def get_service_commands_help(self, platform: Optional[Platform] = None) -> str:
         """Возвращает список служебных команд"""
         help_lines = ["Служебные команды:"]
         help_lines.extend([
             "'Привяжи робота 1' или 'Привяжи панду 2' - привязать робота;",
             "'Отвяжи робота' - отвязать робота;",
-            "'Молчи' - временно остановить общение."
         ])
+        if platform == Platform.ALICE:
+            help_lines.append(
+                "'Молчи' - пауза в диалоге; на Алисе микрофон может оставаться активным "
+                "(в отличие от Salute, где микрофон выключается)."
+            )
+        else:
+            help_lines.append(
+                "'Молчи' - временно остановить общение (на Salute микрофон выключается, навык остаётся активным)."
+            )
         return "\n".join(help_lines)
     
     def get_robot_commands_help(self, user_id: str = None) -> str:

@@ -280,7 +280,7 @@ class ProcessCommandUseCase:
 
         section = detect_help_section_choice(utterance_lower)
         if section == "service":
-            text = self.get_help_uc.get_service_commands_help()
+            text = self.get_help_uc.get_service_commands_help(request.platform)
             if request.user_id:
                 self.user_repository.remove_user_state(request.user_id, UserState.WAITING_HELP_SECTION)
             return text, False
@@ -361,8 +361,8 @@ class ProcessCommandUseCase:
                 return self.get_help_uc.get_help_menu(), False
         
         if function_name == "silence":
-            # Команда "молчи" ставит диалог на паузу (finished=False, но auto_listening=False)
-            # Это позволяет навыку остаться активным, но не слушать дальше
+            # Salute: finished=False + auto_listening=False в build_salute_response.
+            # Alice: только end_session; пауза без выхода из навыка недоступна в API.
             return "Хорошо, помолчим. 🐼👋", False
         
         # Обрабатываем команды привязки/отвязки
